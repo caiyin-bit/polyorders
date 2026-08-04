@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0c0f;
+  --color-panel: #111318;
+  --color-panel2: #171a20;
+  --color-line: #23262e;
+  --color-ink: #e6e8eb;
+  --color-ink2: #9aa2ad;
+  --color-mut: #667085;
+  --color-up: #059669;
+  --color-down: #ef4444;
+  --color-up-ink: #34d399;
+  --color-down-ink: #f87171;
+  --color-accent: #3987e5;
+}
+
+html {
+  color-scheme: dark;
+}
