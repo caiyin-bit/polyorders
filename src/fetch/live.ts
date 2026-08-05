@@ -51,17 +51,17 @@ async function fetchOpenPositions(
   return all;
 }
 
+const INSERT_BATCH = 100;
+
 async function replaceOpenPositions(address: string, items: ApiOpenPosition[]) {
   const now = Date.now();
   await withTransaction(async (client) => {
     await client.query("DELETE FROM open_positions WHERE address = $1", [address]);
-    for (const p of items) {
-      await client.query(
-        `INSERT INTO open_positions
-           (address, condition_id, outcome, size, avg_price, cur_price,
-            initial_value, current_value, cash_pnl, redeemable, title, event_slug, fetched_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [
+    for (let i = 0; i < items.length; i += INSERT_BATCH) {
+      const chunk = items.slice(i, i + INSERT_BATCH);
+      const values: unknown[] = [];
+      const tuples = chunk.map((p, j) => {
+        values.push(
           address,
           p.conditionId,
           p.outcome ?? null,
@@ -75,7 +75,16 @@ async function replaceOpenPositions(address: string, items: ApiOpenPosition[]) {
           p.title ?? null,
           p.eventSlug ?? null,
           now,
-        ],
+        );
+        const b = j * 13;
+        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12},$${b + 13})`;
+      });
+      await client.query(
+        `INSERT INTO open_positions
+           (address, condition_id, outcome, size, avg_price, cur_price,
+            initial_value, current_value, cash_pnl, redeemable, title, event_slug, fetched_at)
+         VALUES ${tuples.join(",")}`,
+        values,
       );
     }
   });
@@ -100,14 +109,16 @@ async function fetchNewTrades(
     );
     if (page.length === 0) break;
     const fresh = since === null ? page : page.filter((t) => t.timestamp > since);
-    for (const t of fresh) {
-      const res = await query(
-        `INSERT INTO trades
-           (address, condition_id, asset, side, price, size, usdc_size,
-            outcome, title, event_slug, transaction_hash, "timestamp")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         ON CONFLICT (address, transaction_hash, asset, side) DO NOTHING`,
-        [
+    if (fresh.length > 0) {
+      // 页内按去重键去重,避免同语句冲突两次
+      const byKey = new Map<string, ApiTrade>();
+      for (const t of fresh) {
+        byKey.set(`${t.transactionHash}|${t.asset ?? ""}|${t.side}`, t);
+      }
+      const rowsToInsert = [...byKey.values()];
+      const values: unknown[] = [];
+      const tuples = rowsToInsert.map((t, j) => {
+        values.push(
           address,
           t.conditionId,
           t.asset ?? null,
@@ -120,7 +131,17 @@ async function fetchNewTrades(
           t.eventSlug ?? null,
           t.transactionHash,
           t.timestamp,
-        ],
+        );
+        const b = j * 12;
+        return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12})`;
+      });
+      const res = await query(
+        `INSERT INTO trades
+           (address, condition_id, asset, side, price, size, usdc_size,
+            outcome, title, event_slug, transaction_hash, "timestamp")
+         VALUES ${tuples.join(",")}
+         ON CONFLICT (address, transaction_hash, asset, side) DO NOTHING`,
+        values,
       );
       inserted += res.rowCount ?? 0;
     }
