@@ -1,8 +1,8 @@
 name: fetch
 
+# 定时抓取已迁至首尔 VPS(docker-compose.vps.yml 的 scheduler),
+# 此工作流仅保留手动触发作为兜底
 on:
-  schedule:
-    - cron: "0 2 * * *" # 每天 UTC 02:00(北京时间 10:00)
   workflow_dispatch:
     inputs:
       args:

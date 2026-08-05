@@ -1,8 +1,8 @@
 name: live
 
+# 定时抓取已迁至首尔 VPS(docker-compose.vps.yml 的 scheduler),
+# 此工作流仅保留手动触发作为兜底
 on:
-  schedule:
-    - cron: "23 */2 * * *" # 每 2 小时,错开整点
   workflow_dispatch:
 
 concurrency:
