@@ -254,10 +254,34 @@ function fmtElapsed(ms: number): string {
   return `${s}s`;
 }
 
-const SESSION_KIND_LABELS: Record<string, string> = {
-  full: "全量",
-  live: "动向",
+// 会话类型的中文名与说明(说明用于悬停提示)
+const SESSION_KINDS: Record<string, { label: string; hint: string }> = {
+  full: {
+    label: "完整更新",
+    hint: "重新扫描排行榜全部地址:候选 → 初筛 → 拉取仓位 → 评分排名 → 更新动向",
+  },
+  live: {
+    label: "动向更新",
+    hint: "只更新最终入选地址的当前持仓与最新成交",
+  },
+  // 单步记录(分组功能上线前的历史数据)
+  candidates: { label: "拉取候选", hint: "从排行榜抓取候选地址池" },
+  prefilter: { label: "初筛地址", hint: "按交易市场数与盈亏过滤候选地址" },
+  positions: { label: "拉取仓位", hint: "抓取通过初筛地址的已平仓仓位" },
+  score: { label: "计算评分", hint: "按胜率 × ln(仓位数) 重新排名" },
 };
+
+function sessionKind(kind: string): { label: string; hint: string } {
+  return (
+    SESSION_KINDS[kind] ?? {
+      label: kind
+        .split("+")
+        .map((k) => SESSION_KINDS[k]?.label ?? k)
+        .join(" + "),
+      hint: "部分步骤",
+    }
+  );
+}
 
 function PipelinePanel() {
   const router = useRouter();
@@ -358,8 +382,9 @@ function PipelinePanel() {
     <section className="rounded-lg border border-line bg-panel p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink2">
-          抓取管线
+          数据更新
           <span
+            title={running ? "正在更新" : "空闲"}
             className={`inline-block h-1.5 w-1.5 rounded-full ${
               running ? "animate-pulse bg-up" : "bg-mut"
             }`}
@@ -413,7 +438,9 @@ function PipelinePanel() {
               <span className="tabular-nums text-ink2">
                 {fmtClockBJ(status.nextRun.at)}
               </span>{" "}
-              （{status.nextRun.kind === "live" ? "动向" : "全量"}）
+              <span title={sessionKind(status.nextRun.kind).hint}>
+                （{sessionKind(status.nextRun.kind).label}）
+              </span>
             </>
           ) : (
             "…"
@@ -499,8 +526,11 @@ function PipelinePanel() {
                       {s.ok ? "✓" : "✕"}
                     </span>
                   )}
-                  <span className="shrink-0 text-ink2">
-                    {SESSION_KIND_LABELS[s.kind] ?? s.kind}
+                  <span
+                    className="shrink-0 text-ink2"
+                    title={sessionKind(s.kind).hint}
+                  >
+                    {sessionKind(s.kind).label}
                   </span>
                   <span className="text-mut" suppressHydrationWarning>
                     {fmtClock(s.started_at)}
@@ -1260,7 +1290,7 @@ export default function Dashboard({
 
         {rows.length === 0 ? (
           <p className="px-4 py-8 text-sm text-mut">
-            暂无评分数据,先运行抓取管线(RUN 或 pnpm fetch)
+            暂无排名数据,点击左侧「数据更新」的 RUN 开始抓取
           </p>
         ) : (
           <table className="w-full text-left text-xs">
