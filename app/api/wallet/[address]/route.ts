@@ -29,7 +29,7 @@ export async function GET(
   const where = q ? "address = $1 AND title ILIKE $2" : "address = $1";
   const args: unknown[] = q ? [address, `%${q}%`] : [address];
 
-  const [scoreRes, candRes, countRes, posRes, openRes, openCountRes] = await Promise.all([
+  const [scoreRes, candRes, countRes, posRes, openRes, openCountRes, tradesRes] = await Promise.all([
     query(
       `SELECT total_positions, winning_positions, win_rate,
               total_realized_pnl, avg_pnl, rank
@@ -60,6 +60,13 @@ export async function GET(
     ),
     query<{ n: number }>(
       "SELECT COUNT(*)::int AS n FROM open_positions WHERE address = $1",
+      [address],
+    ),
+    query(
+      `SELECT side, price, usdc_size, outcome, title, event_slug, "timestamp"
+       FROM trades WHERE address = $1
+       ORDER BY "timestamp" DESC
+       LIMIT 50`,
       [address],
     ),
   ]);
@@ -106,6 +113,7 @@ export async function GET(
     positions: rows,
     openPositions: openRes.rows,
     openTotal: openCountRes.rows[0].n,
+    trades: tradesRes.rows,
     curve,
   });
 }

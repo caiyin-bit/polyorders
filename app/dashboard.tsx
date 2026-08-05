@@ -33,8 +33,7 @@ export type RunRow = {
   error: string | null;
 };
 
-export type FeedTrade = {
-  address: string;
+export type TradeLine = {
   side: string;
   price: number | null;
   usdc_size: number | null;
@@ -43,6 +42,8 @@ export type FeedTrade = {
   event_slug: string | null;
   timestamp: number;
 };
+
+export type FeedTrade = TradeLine & { address: string };
 
 export type Funnel = {
   candidates: number;
@@ -422,7 +423,7 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
 
 /* ---------- 行内最新动向 ---------- */
 
-function FeedLines({ trades }: { trades: FeedTrade[] }) {
+function FeedLines({ trades }: { trades: TradeLine[] }) {
   return (
     <ul className="space-y-1 border-l-2 border-line pl-3">
       {trades.map((t, i) => {
@@ -475,7 +476,7 @@ function FeedLines({ trades }: { trades: FeedTrade[] }) {
   );
 }
 
-/* ---------- 钱包详情抽屉 ---------- */
+/* ---------- 钱包详情弹窗 ---------- */
 
 type OpenPositionRow = {
   condition_id: string;
@@ -502,6 +503,7 @@ type WalletDetail = {
   pageSize: number;
   openPositions: OpenPositionRow[];
   openTotal: number;
+  trades: TradeLine[];
   positions: Array<{
     condition_id: string;
     title: string | null;
@@ -623,7 +625,7 @@ function EquityCurve({ points }: { points: Array<[number, number]> }) {
   );
 }
 
-function Drawer({
+function WalletModal({
   address,
   onClose,
 }: {
@@ -693,14 +695,14 @@ function Drawer({
   const pageSize = detail?.pageSize ?? 50;
 
   return (
-    <div className="fixed inset-0 z-40">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/60"
         onClick={onClose}
         aria-hidden
       />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-[600px] flex-col border-l border-line bg-panel shadow-2xl">
-        <div className="flex items-start justify-between border-b border-line px-5 py-4">
+      <div className="relative flex max-h-[88vh] w-full max-w-[1120px] flex-col rounded-lg border border-line bg-panel shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between border-b border-line px-5 py-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="font-mono text-base font-semibold">
@@ -739,8 +741,8 @@ function Drawer({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 lg:overflow-hidden">
+          <div className="grid shrink-0 grid-cols-3 gap-2 sm:grid-cols-6">
             {stats.map((st) => (
               <div
                 key={st.label}
@@ -754,7 +756,13 @@ function Drawer({
             ))}
           </div>
 
-          {detail && detail.openTotal > 0 && (
+          <div className="mt-4 grid grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
+            <section className="min-h-0 lg:overflow-y-auto lg:pr-1">
+              <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
+                最新动向
+              </h3>
+
+              {detail && detail.openTotal > 0 && (
             <div className="mt-5">
               <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
                 当前持仓
@@ -808,9 +816,34 @@ function Drawer({
                 </tbody>
               </table>
             </div>
-          )}
+              )}
 
-          <div className="mt-5">
+              <div className="mt-5">
+                <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
+                  成交流水
+                  <span className="ml-2 font-mono font-normal text-mut">
+                    最近 {detail?.trades.length ?? 0} 笔
+                  </span>
+                </h3>
+                {!detail ? (
+                  <p className="text-xs text-mut">加载中…</p>
+                ) : detail.trades.length > 0 ? (
+                  <FeedLines trades={detail.trades} />
+                ) : (
+                  <p className="text-xs text-mut">暂无成交数据</p>
+                )}
+              </div>
+            </section>
+
+            <section className="min-h-0 lg:overflow-y-auto lg:pr-1">
+              <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
+                已平仓
+                <span className="ml-2 font-mono font-normal text-mut">
+                  {total.toLocaleString()} 条
+                </span>
+              </h3>
+
+          <div>
             <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
               累计已实现盈亏
             </h3>
@@ -908,8 +941,10 @@ function Drawer({
               </div>
             )}
           </div>
+            </section>
+          </div>
         </div>
-      </aside>
+      </div>
     </div>
   );
 }
@@ -1244,7 +1279,7 @@ export default function Dashboard({
       </section>
 
       {selected && (
-        <Drawer address={selected} onClose={() => openWallet(null)} />
+        <WalletModal address={selected} onClose={() => openWallet(null)} />
       )}
     </div>
   );
