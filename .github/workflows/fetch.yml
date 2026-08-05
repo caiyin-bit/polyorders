@@ -1,0 +1,36 @@
+name: fetch
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 每天 UTC 02:00(北京时间 10:00)
+  workflow_dispatch:
+    inputs:
+      args:
+        description: "fetch 参数(如 --step=4、--force)"
+        required: false
+        default: ""
+
+concurrency:
+  group: fetch
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # 全量抓取约 3 小时,留余量
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 应用数据库迁移
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      - name: 运行抓取管线
+        run: pnpm exec tsx src/fetch/index.ts ${{ inputs.args }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -1,4 +1,4 @@
-import { DATA_API } from "../config";
+import { DATA_API, SCORE_MAX_POSITIONS } from "../config";
 import { query } from "../db";
 import { createLimiter, fetchJson } from "../http";
 
@@ -13,7 +13,9 @@ type ClosedPosition = {
 };
 
 const PAGE_SIZE = 50;
-const MAX_OFFSET = 100_000;
+// 熔断:拉满评分上限即停——仓位数 ≥ SCORE_MAX_POSITIONS 的地址(做市机器人)
+// 必被评分剔除,拉全既浪费时间也浪费存储。调大阈值后需 --force 重抓已截断地址。
+const MAX_OFFSET = SCORE_MAX_POSITIONS;
 
 async function insertPage(address: string, items: ClosedPosition[]) {
   // 页内按去重键去重,避免同一语句对同一行冲突两次
@@ -88,6 +90,10 @@ export async function fetchPositions(
         console.log(`positions: ${address.slice(0, 10)}… ${rows} rows so far`);
       }
       if (page.length < PAGE_SIZE) break;
+      if (rows >= MAX_OFFSET) {
+        console.log(`positions: ${address.slice(0, 10)}… 截断于 ${rows} 行(≥评分上限)`);
+        break;
+      }
     }
     await query(
       "UPDATE candidates SET positions_fetched_at = $1 WHERE address = $2",

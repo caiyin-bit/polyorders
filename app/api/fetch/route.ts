@@ -21,6 +21,13 @@ function externalFetchRunning(): boolean {
 }
 
 export async function POST() {
+  // Vercel serverless 无常驻进程,线上抓取由 GitHub Actions 定时执行
+  if (process.env.VERCEL) {
+    return Response.json(
+      { started: false, reason: "线上环境请通过 GitHub Actions 触发抓取" },
+      { status: 501 },
+    );
+  }
   if (childRunning() || externalFetchRunning()) {
     return Response.json(
       { started: false, reason: "already_running" },

@@ -11,9 +11,14 @@ const g = globalThis as unknown as { __pgPool?: Pool };
 
 export function getPool(): Pool {
   if (!g.__pgPool) {
+    const connectionString = process.env.DATABASE_URL ?? DEFAULT_URL;
     g.__pgPool = new Pool({
-      connectionString: process.env.DATABASE_URL ?? DEFAULT_URL,
+      connectionString,
       max: 10,
+      // Supabase 强制 TLS 且证书为其自有 CA,跳过链校验
+      ssl: connectionString.includes("supabase.co")
+        ? { rejectUnauthorized: false }
+        : undefined,
     });
   }
   return g.__pgPool;
