@@ -77,6 +77,8 @@ type SortKey =
   | "score";
 
 const PAGE_SIZES = [15, 50, 100];
+// 第一页固定展示 Top N 行，后续页从第 FIRST_PAGE_SIZE + 1 条开始按 pageSize 分页
+const FIRST_PAGE_SIZE = 11;
 
 function pageList(cur: number, count: number): number[] {
   const set = new Set([0, count - 1, cur - 1, cur, cur + 1]);
@@ -986,9 +988,18 @@ export default function Dashboard({
     return out;
   }, [rows, search, minWinRate, minPositions, sortKey, sortAsc]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageCount = Math.max(
+    1,
+    1 + Math.ceil(Math.max(0, filtered.length - FIRST_PAGE_SIZE) / pageSize)
+  );
   const curPage = Math.min(page, pageCount - 1);
-  const visible = filtered.slice(curPage * pageSize, (curPage + 1) * pageSize);
+  const pageStart =
+    curPage === 0 ? 0 : FIRST_PAGE_SIZE + (curPage - 1) * pageSize;
+  const pageEnd = Math.min(
+    curPage === 0 ? FIRST_PAGE_SIZE : pageStart + pageSize,
+    filtered.length
+  );
+  const visible = filtered.slice(pageStart, pageEnd);
 
   const tableRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
@@ -1156,9 +1167,7 @@ export default function Dashboard({
         {filtered.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 border-t border-line px-4 py-2.5 font-mono text-[11px] text-mut">
             <span className="tabular-nums">
-              {curPage * pageSize + 1}–
-              {Math.min((curPage + 1) * pageSize, filtered.length)} /{" "}
-              {filtered.length} 条
+              {pageStart + 1}–{pageEnd} / {filtered.length} 条
             </span>
             <label className="flex items-center gap-1">
               每页
