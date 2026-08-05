@@ -11,13 +11,14 @@ function argValue(name: string): string | undefined {
 }
 
 function runStep(
+  group: string,
   name: string,
   fn: () => Promise<{ ok?: number; failed?: number } | void>,
 ) {
   return async () => {
     const { rows } = await query<{ id: number }>(
-      "INSERT INTO fetch_runs (step, started_at) VALUES ($1, $2) RETURNING id",
-      [name, Date.now()],
+      "INSERT INTO fetch_runs (step, started_at, run_group) VALUES ($1, $2, $3) RETURNING id",
+      [name, Date.now(), group],
     );
     const runId = rows[0].id;
     const started = Date.now();
@@ -44,14 +45,19 @@ async function main() {
   const maxArg = argValue("max");
   const max = maxArg ? Number(maxArg) : undefined;
 
+  // 一次 main() 调用 = 一个抓取会话,各步骤共享 run_group 便于面板分组
+  const runGroup = String(Date.now());
+
   const steps: Record<string, () => Promise<void>> = {
-    "1": runStep("candidates", () =>
+    "1": runStep(runGroup, "candidates", () =>
       fetchCandidates(force).then((n) => ({ ok: n })),
     ),
-    "2": runStep("prefilter", () => prefilter(force, max)),
-    "3": runStep("positions", () => fetchPositions(force, max)),
-    "4": runStep("score", () => computeScores().then((r) => ({ ok: r.total }))),
-    "5": runStep("live", () => fetchLive()),
+    "2": runStep(runGroup, "prefilter", () => prefilter(force, max)),
+    "3": runStep(runGroup, "positions", () => fetchPositions(force, max)),
+    "4": runStep(runGroup, "score", () =>
+      computeScores().then((r) => ({ ok: r.total })),
+    ),
+    "5": runStep(runGroup, "live", () => fetchLive()),
   };
 
   const selected = step ? [step] : Object.keys(steps);

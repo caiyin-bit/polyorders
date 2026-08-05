@@ -62,11 +62,22 @@ type Config = {
   maxPositions: number;
 };
 
+type FetchSession = {
+  group: string;
+  kind: string;
+  started_at: number;
+  finished_at: number | null;
+  ok: boolean;
+  steps: RunRow[];
+};
+
 type FetchStatus = {
   running: boolean;
   canRun?: boolean;
   current: { step: string; started_at: number } | null;
-  recent?: RunRow[];
+  polymarket?: { ok: boolean; latencyMs: number | null };
+  nextRun?: { at: number; kind: "live" | "full" };
+  sessions?: FetchSession[];
   counts: {
     candidates: number;
     prefiltered: number;
@@ -226,6 +237,14 @@ function fmtClock(ms: number): string {
   });
 }
 
+// 北京时间 HH:mm(调度规则本身按北京时间定义,不随浏览器时区显示)
+function fmtClockBJ(ms: number): string {
+  const d = new Date(ms + 8 * 3600_000);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function fmtElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(s / 3600);
@@ -235,10 +254,16 @@ function fmtElapsed(ms: number): string {
   return `${s}s`;
 }
 
-function PipelinePanel({ runs }: { runs: RunRow[] }) {
+const SESSION_KIND_LABELS: Record<string, string> = {
+  full: "全量",
+  live: "动向",
+};
+
+function PipelinePanel() {
   const router = useRouter();
   const [status, setStatus] = useState<FetchStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const running = status?.running ?? false;
   const canRun = status?.canRun;
 
@@ -296,8 +321,6 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
   }
 
   const c = status?.counts;
-  // 运行记录优先用轮询到的实时数据,SSR 传入的 runs 仅作首屏兜底(页面有 ISR 缓存)
-  const displayRuns = status?.recent ?? runs;
   const currentStep = status?.current?.step ?? null;
   const STEP_ORDER = ["candidates", "prefilter", "positions", "score", "live"];
   const currentIdx = currentStep ? STEP_ORDER.indexOf(currentStep) : -1;
@@ -361,6 +384,42 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
           线上由 GitHub Actions 定时抓取(每日全量 · 每 2 小时动向)
         </p>
       )}
+      <div className="mb-3 space-y-1 font-mono text-[11px] text-mut">
+        <p className="flex items-center gap-1.5">
+          <span
+            className={`inline-block h-1.5 w-1.5 rounded-full ${
+              !status ? "bg-mut" : status.polymarket?.ok ? "bg-up" : "bg-down"
+            }`}
+          />
+          {!status ? (
+            "Polymarket 探测中…"
+          ) : status.polymarket?.ok ? (
+            <>
+              Polymarket 在线
+              {status.polymarket.latencyMs !== null && (
+                <span className="tabular-nums">
+                  {status.polymarket.latencyMs}ms
+                </span>
+              )}
+            </>
+          ) : (
+            "Polymarket 离线"
+          )}
+        </p>
+        <p>
+          下次更新{" "}
+          {status?.nextRun ? (
+            <>
+              <span className="tabular-nums text-ink2">
+                {fmtClockBJ(status.nextRun.at)}
+              </span>{" "}
+              （{status.nextRun.kind === "live" ? "动向" : "全量"}）
+            </>
+          ) : (
+            "…"
+          )}
+        </p>
+      </div>
       {running && liveSteps && (
         <div className="mb-3">
           <div className="grid grid-cols-5 gap-1">
@@ -412,47 +471,91 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
           )}
         </div>
       )}
-      <table className="w-full text-left font-mono text-[11px]">
-        <thead className="text-mut">
-          <tr>
-            <th className="py-1 font-normal">步骤</th>
-            <th className="py-1 font-normal">开始</th>
-            <th className="py-1 text-right font-normal">耗时</th>
-            <th className="py-1 text-right font-normal">OK/失败</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line/60">
-          {displayRuns.slice(0, 6).map((r, i) => (
-            <tr key={i} title={r.error ?? undefined}>
-              <td className="py-1">
-                <span className={r.error ? "text-down-ink" : "text-ink2"}>
-                  {r.step}
-                  {r.error && " ✕"}
-                </span>
-              </td>
-              {/* 本地时区渲染,服务端(容器 UTC)与浏览器可能不同,以客户端为准 */}
-              <td className="py-1 text-mut" suppressHydrationWarning>
-                {fmtClock(r.started_at)}
-              </td>
-              <td className="py-1 text-right tabular-nums text-mut">
-                {r.finished_at
-                  ? `${((r.finished_at - r.started_at) / 1000).toFixed(0)}s`
-                  : "…"}
-              </td>
-              <td className="py-1 text-right tabular-nums text-mut">
-                {r.addresses_ok ?? "-"}/{r.addresses_failed ?? "-"}
-              </td>
-            </tr>
-          ))}
-          {displayRuns.length === 0 && (
-            <tr>
-              <td colSpan={4} className="py-2 text-mut">
-                暂无记录,点击 RUN 或运行 pnpm fetch
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      {!status ? (
+        <p className="py-2 font-mono text-[11px] text-mut">加载中…</p>
+      ) : (status.sessions ?? []).length === 0 ? (
+        <p className="py-2 font-mono text-[11px] text-mut">
+          暂无记录,点击 RUN 或运行 pnpm fetch
+        </p>
+      ) : (
+        <ul className="divide-y divide-line/60 font-mono text-[11px]">
+          {status.sessions!.map((s) => {
+            const open = expanded === s.group;
+            return (
+              <li key={s.group}>
+                <button
+                  onClick={() => setExpanded(open ? null : s.group)}
+                  className="flex w-full items-center gap-2 py-1.5 text-left"
+                >
+                  <span className="w-3 shrink-0 text-mut">
+                    {open ? "▾" : "▸"}
+                  </span>
+                  {s.finished_at === null ? (
+                    <span className="shrink-0 animate-pulse text-accent">…</span>
+                  ) : (
+                    <span
+                      className={`shrink-0 ${s.ok ? "text-up-ink" : "text-down-ink"}`}
+                    >
+                      {s.ok ? "✓" : "✕"}
+                    </span>
+                  )}
+                  <span className="shrink-0 text-ink2">
+                    {SESSION_KIND_LABELS[s.kind] ?? s.kind}
+                  </span>
+                  <span className="text-mut" suppressHydrationWarning>
+                    {fmtClock(s.started_at)}
+                  </span>
+                  <span className="ml-auto shrink-0 tabular-nums text-mut">
+                    {s.finished_at
+                      ? fmtElapsed(s.finished_at - s.started_at)
+                      : "进行中"}
+                  </span>
+                </button>
+                {open && (
+                  <table className="mb-2 w-full text-left">
+                    <thead className="text-mut">
+                      <tr>
+                        <th className="py-1 pl-5 font-normal">步骤</th>
+                        <th className="py-1 font-normal">开始</th>
+                        <th className="py-1 text-right font-normal">耗时</th>
+                        <th className="py-1 text-right font-normal">
+                          OK/失败
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line/60">
+                      {s.steps.map((r, i) => (
+                        <tr key={i} title={r.error ?? undefined}>
+                          <td className="py-1 pl-5">
+                            <span
+                              className={r.error ? "text-down-ink" : "text-ink2"}
+                            >
+                              {STEP_LABELS[r.step] ?? r.step}
+                              {r.error && " ✕"}
+                            </span>
+                          </td>
+                          {/* 本地时区渲染,服务端(容器 UTC)与浏览器可能不同,以客户端为准 */}
+                          <td className="py-1 text-mut" suppressHydrationWarning>
+                            {fmtClock(r.started_at)}
+                          </td>
+                          <td className="py-1 text-right tabular-nums text-mut">
+                            {r.finished_at
+                              ? `${((r.finished_at - r.started_at) / 1000).toFixed(0)}s`
+                              : "…"}
+                          </td>
+                          <td className="py-1 text-right tabular-nums text-mut">
+                            {r.addresses_ok ?? "-"}/{r.addresses_failed ?? "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
@@ -1009,13 +1112,11 @@ const COLUMNS: Array<{ key: SortKey; label: string; align: "left" | "right" }> =
 export default function Dashboard({
   rows,
   funnel,
-  runs,
   feed,
   config,
 }: {
   rows: LeaderRow[];
   funnel: Funnel;
-  runs: RunRow[];
   feed: FeedTrade[];
   config: Config;
 }) {
@@ -1111,7 +1212,7 @@ export default function Dashboard({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
       <div className="space-y-4">
         <FunnelPanel funnel={funnel} config={config} />
-        <PipelinePanel runs={runs} />
+        <PipelinePanel />
       </div>
 
       <section

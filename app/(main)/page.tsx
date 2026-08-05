@@ -10,14 +10,13 @@ import Dashboard, {
   type FeedTrade,
   type Funnel,
   type LeaderRow,
-  type RunRow,
 } from "../dashboard";
 
 // ISR:数据由每日定时抓取更新,5 分钟缓存足够新鲜;dev 模式不受影响仍实时
 export const revalidate = 300;
 
 export default async function HomePage() {
-  const [funnelRes, rowsRes, sparkRes, runsRes, feedRes] = await Promise.all([
+  const [funnelRes, rowsRes, sparkRes, feedRes] = await Promise.all([
     query<{
       candidates: number;
       prefilter_pass: number;
@@ -51,10 +50,6 @@ export default async function HomePage() {
        ) sp
        WHERE s.rank IS NOT NULL
        ORDER BY s.address, sp."timestamp" ASC`,
-    ),
-    query<RunRow>(
-      `SELECT step, started_at, finished_at, addresses_ok, addresses_failed, error
-       FROM fetch_runs ORDER BY id DESC LIMIT 8`,
     ),
     query<FeedTrade>(
       // Top N 每个地址各取最近 3 笔成交,用于榜单行内「最新动向」
@@ -98,7 +93,6 @@ export default async function HomePage() {
     <Dashboard
       rows={rows}
       funnel={funnel}
-      runs={runsRes.rows}
       feed={feedRes.rows}
       config={{
         topN: TOP_N,
