@@ -2,6 +2,8 @@
 # 不用 standalone 输出:RUN 按钮与 scheduler 都需要完整 node_modules(tsx)
 FROM node:22-alpine AS app
 RUN apk add --no-cache curl tzdata && corepack enable
+# 全链路(含构建期 ISR 预渲染)使用北京时间
+ENV TZ=Asia/Shanghai
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
