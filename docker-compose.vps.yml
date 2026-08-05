@@ -31,6 +31,8 @@ services:
     build:
       context: .
       target: scheduler
+      args:
+        DATABASE_URL: ${DATABASE_URL}
     restart: unless-stopped
     env_file: .env
     volumes:
