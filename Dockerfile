@@ -1,7 +1,7 @@
 # 生产镜像:web(next start)与 scheduler(crond 定时抓取)共用同一构建
 # 不用 standalone 输出:RUN 按钮与 scheduler 都需要完整 node_modules(tsx)
 FROM node:22-alpine AS app
-RUN apk add --no-cache curl && corepack enable
+RUN apk add --no-cache curl tzdata && corepack enable
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
