@@ -6,7 +6,7 @@ import {
   SCORE_MIN_POSITIONS,
   TOP_N,
 } from "@/src/config";
-import Dashboard, { type Funnel, type LeaderRow, type RunRow } from "./dashboard";
+import Dashboard, { type Funnel, type LeaderRow, type RunRow } from "../dashboard";
 
 // ISR:数据由每日定时抓取更新,5 分钟缓存足够新鲜;dev 模式不受影响仍实时
 export const revalidate = 300;
