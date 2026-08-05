@@ -57,11 +57,20 @@ export default async function HomePage() {
        FROM fetch_runs ORDER BY id DESC LIMIT 8`,
     ),
     query<FeedTrade>(
-      `SELECT t.address, c.username, t.side, t.price, t.usdc_size, t.outcome,
+      // Top N 每个地址各取最近 3 笔成交,用于榜单行内「最新动向」
+      `SELECT s.address, t.side, t.price, t.usdc_size, t.outcome,
               t.title, t.event_slug, t."timestamp"
-       FROM trades t LEFT JOIN candidates c ON c.address = t.address
-       ORDER BY t."timestamp" DESC
-       LIMIT 30`,
+       FROM scores s
+       CROSS JOIN LATERAL (
+         SELECT side, price, usdc_size, outcome, title, event_slug, "timestamp"
+         FROM trades
+         WHERE address = s.address
+         ORDER BY "timestamp" DESC
+         LIMIT 3
+       ) t
+       WHERE s.rank <= $1
+       ORDER BY s.rank, t."timestamp" DESC`,
+      [TOP_N],
     ),
   ]);
 

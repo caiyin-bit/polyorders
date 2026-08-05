@@ -1,7 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { fmtPct, fmtTime, fmtUsd, shortAddr } from "./lib/format";
 
 export type LeaderRow = {
@@ -28,7 +35,6 @@ export type RunRow = {
 
 export type FeedTrade = {
   address: string;
-  username: string | null;
   side: string;
   price: number | null;
   usdc_size: number | null;
@@ -414,67 +420,58 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
   );
 }
 
-/* ---------- Top N 最新动向 ---------- */
+/* ---------- 行内最新动向 ---------- */
 
-function LiveFeedPanel({ feed, topN }: { feed: FeedTrade[]; topN: number }) {
+function FeedLines({ trades }: { trades: FeedTrade[] }) {
   return (
-    <section className="rounded-lg border border-line bg-panel p-4">
-      <h2 className="mb-3 text-xs font-medium tracking-wide text-ink2">
-        Top {topN} 最新动向
-        <span className="ml-2 font-normal text-mut">每 2 小时更新</span>
-      </h2>
-      {feed.length === 0 ? (
-        <p className="text-xs text-mut">
-          暂无成交数据,先运行抓取 step 5
-        </p>
-      ) : (
-        <ul className="divide-y divide-line/60">
-          {feed.map((t, i) => {
-            const buy = t.side === "BUY";
-            return (
-              <li key={i} className="py-2 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`shrink-0 rounded px-1 py-px font-mono text-[10px] font-semibold ${
-                      buy
-                        ? "bg-up/15 text-up-ink"
-                        : "bg-down/15 text-down-ink"
-                    }`}
-                  >
-                    {buy ? "买" : "卖"}
-                  </span>
-                  {t.event_slug ? (
-                    <a
-                      href={`https://polymarket.com/event/${t.event_slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="truncate text-ink2 hover:text-accent hover:underline"
-                    >
-                      {t.title ?? "-"}
-                    </a>
-                  ) : (
-                    <span className="truncate text-ink2">{t.title ?? "-"}</span>
-                  )}
-                </div>
-                <div className="mt-1 flex items-baseline gap-2 font-mono text-[11px] tabular-nums text-mut">
-                  <span className={buy ? "text-up-ink" : "text-down-ink"}>
-                    {fmtUsd(t.usdc_size)}
-                  </span>
-                  <span>@{t.price !== null ? t.price.toFixed(2) : "-"}</span>
-                  <span className="truncate">{t.outcome ?? ""}</span>
-                  <span className="ml-auto shrink-0 truncate">
-                    {t.username ?? shortAddr(t.address)}
-                  </span>
-                  <span className="shrink-0" suppressHydrationWarning>
-                    {fmtClock(t.timestamp * 1000)}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
+    <ul className="space-y-1 border-l-2 border-line pl-3">
+      {trades.map((t, i) => {
+        const buy = t.side === "BUY";
+        return (
+          <li
+            key={i}
+            className="flex items-center gap-2 font-mono text-[11px] text-mut"
+          >
+            <span
+              className={`shrink-0 rounded px-1 py-px text-[10px] font-semibold ${
+                buy ? "bg-up/15 text-up-ink" : "bg-down/15 text-down-ink"
+              }`}
+            >
+              {buy ? "买" : "卖"}
+            </span>
+            {t.event_slug ? (
+              <a
+                href={`https://polymarket.com/event/${t.event_slug}`}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="min-w-0 flex-1 truncate text-ink2 hover:text-accent hover:underline"
+              >
+                {t.title ?? "-"}
+              </a>
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-ink2">
+                {t.title ?? "-"}
+              </span>
+            )}
+            <span
+              className={`shrink-0 tabular-nums ${
+                buy ? "text-up-ink" : "text-down-ink"
+              }`}
+            >
+              {fmtUsd(t.usdc_size)}
+            </span>
+            <span className="shrink-0 tabular-nums">
+              @{t.price !== null ? t.price.toFixed(2) : "-"}
+            </span>
+            <span className="min-w-0 max-w-40 truncate">{t.outcome ?? ""}</span>
+            <span className="ml-auto shrink-0" suppressHydrationWarning>
+              {fmtClock(t.timestamp * 1000)}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -988,6 +985,16 @@ export default function Dashboard({
     return out;
   }, [rows, search, minWinRate, minPositions, sortKey, sortAsc]);
 
+  const feedByAddr = useMemo(() => {
+    const m = new Map<string, FeedTrade[]>();
+    for (const t of feed) {
+      let arr = m.get(t.address);
+      if (!arr) m.set(t.address, (arr = []));
+      arr.push(t);
+    }
+    return m;
+  }, [feed]);
+
   const pageCount = Math.max(
     1,
     1 + Math.ceil(Math.max(0, filtered.length - FIRST_PAGE_SIZE) / pageSize)
@@ -1024,7 +1031,6 @@ export default function Dashboard({
       <div className="space-y-4">
         <FunnelPanel funnel={funnel} config={config} />
         <PipelinePanel runs={runs} />
-        <LiveFeedPanel feed={feed} topN={config.topN} />
       </div>
 
       <section
@@ -1101,63 +1107,80 @@ export default function Dashboard({
                 <th className="py-2 pr-4 text-right font-normal">近 24 笔</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-line/60">
+            <tbody>
               {visible.map((r) => {
                 const isTop = r.rank <= config.topN;
+                const trades = feedByAddr.get(r.address);
                 return (
-                  <tr
-                    key={r.address}
-                    onClick={() => openWallet(r.address)}
-                    className="cursor-pointer hover:bg-panel2"
-                  >
-                    <td className="py-1.5 pl-4 pr-2">
-                      <span
-                        className={`font-mono tabular-nums ${
-                          isTop ? "font-semibold text-up-ink" : "text-mut"
-                        }`}
-                      >
-                        {r.rank}
-                      </span>
-                    </td>
-                    <td className="max-w-52 py-1.5 pr-3">
-                      <div className="flex items-baseline gap-2">
-                        <span className="shrink-0 font-mono text-ink">
-                          {shortAddr(r.address)}
+                  <Fragment key={r.address}>
+                    <tr
+                      onClick={() => openWallet(r.address)}
+                      className="cursor-pointer border-t border-line/60 first:border-t-0 hover:bg-panel2"
+                    >
+                      <td className="py-1.5 pl-4 pr-2">
+                        <span
+                          className={`font-mono tabular-nums ${
+                            isTop ? "font-semibold text-up-ink" : "text-mut"
+                          }`}
+                        >
+                          {r.rank}
                         </span>
-                        {r.username && (
-                          <span className="truncate text-mut">{r.username}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-1.5 pr-3 text-right">
-                      <span className="font-mono tabular-nums">
-                        {fmtPct(r.win_rate)}
-                      </span>
-                      <div className="mt-0.5 ml-auto h-[3px] w-14 rounded-sm bg-panel2">
-                        <div
-                          className="h-full rounded-sm bg-up"
-                          style={{ width: `${r.win_rate * 100}%` }}
-                        />
-                      </div>
-                    </td>
-                    <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
-                      {r.total_positions}
-                    </td>
-                    <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
-                      <Pnl value={r.total_realized_pnl} />
-                    </td>
-                    <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
-                      <Pnl value={r.avg_pnl} />
-                    </td>
-                    <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
-                      {r.score.toFixed(3)}
-                    </td>
-                    <td className="py-1.5 pr-4">
-                      <div className="flex justify-end">
-                        <Spark values={r.spark} />
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="max-w-52 py-1.5 pr-3">
+                        <div className="flex items-baseline gap-2">
+                          <span className="shrink-0 font-mono text-ink">
+                            {shortAddr(r.address)}
+                          </span>
+                          {r.username && (
+                            <span className="truncate text-mut">
+                              {r.username}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-1.5 pr-3 text-right">
+                        <span className="font-mono tabular-nums">
+                          {fmtPct(r.win_rate)}
+                        </span>
+                        <div className="mt-0.5 ml-auto h-[3px] w-14 rounded-sm bg-panel2">
+                          <div
+                            className="h-full rounded-sm bg-up"
+                            style={{ width: `${r.win_rate * 100}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
+                        {r.total_positions}
+                        <div className="text-[10px] text-mut">
+                          胜 {r.winning_positions}
+                        </div>
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                        <Pnl value={r.total_realized_pnl} />
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                        <Pnl value={r.avg_pnl} />
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
+                        {r.score.toFixed(3)}
+                      </td>
+                      <td className="py-1.5 pr-4">
+                        <div className="flex justify-end">
+                          <Spark values={r.spark} />
+                        </div>
+                      </td>
+                    </tr>
+                    {trades && trades.length > 0 && (
+                      <tr
+                        onClick={() => openWallet(r.address)}
+                        className="cursor-pointer hover:bg-panel2"
+                      >
+                        <td colSpan={8} className="max-w-0 px-4 pb-2.5 pt-0">
+                          <FeedLines trades={trades} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
