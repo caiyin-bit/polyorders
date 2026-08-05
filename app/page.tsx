@@ -8,7 +8,8 @@ import {
 } from "@/src/config";
 import Dashboard, { type Funnel, type LeaderRow, type RunRow } from "./dashboard";
 
-export const dynamic = "force-dynamic";
+// ISR:数据由每日定时抓取更新,5 分钟缓存足够新鲜;dev 模式不受影响仍实时
+export const revalidate = 300;
 
 export default async function HomePage() {
   const [funnelRes, rowsRes, sparkRes, runsRes] = await Promise.all([
