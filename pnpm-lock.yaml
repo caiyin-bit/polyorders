@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      jose:
+        specifier: ^6.2.8
+        version: 6.2.8
       next:
         specifier: ^16.2.12
         version: 16.2.12(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -582,6 +585,9 @@ packages:
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
+
+  jose@6.2.8:
+    resolution: {integrity: sha512-Bsdjwm3Qsd/P0jR+BHDe3LytDfY7WBq2HmCCLIwuVRHMuEC9ae7/R474GIUdF1NgCyZjzVo/A9DOiOBtXq8ZoQ==}
 
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
@@ -1186,6 +1192,8 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   jiti@2.7.0: {}
+
+  jose@6.2.8: {}
 
   lightningcss-android-arm64@1.32.0:
     optional: true

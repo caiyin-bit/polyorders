@@ -1,21 +1,14 @@
 import type { Metadata } from "next";
-import TelegramWidget from "./telegram-widget";
+import { telegramBotId } from "@/src/auth";
+import LoginButton from "./login-button";
 
 export const metadata: Metadata = { title: "登录 · polyorders" };
 
-const ERRORS: Record<string, string> = {
-  denied: "该 Telegram 账号不在白名单内,请联系管理员",
-  invalid: "登录校验失败,请重试",
-  config: "服务端未配置登录参数",
-};
-
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
-  const bot = process.env.TELEGRAM_BOT_USERNAME ?? "";
+export default function LoginPage() {
+  let botId = "";
+  try {
+    botId = telegramBotId();
+  } catch {}
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-6">
@@ -26,15 +19,10 @@ export default async function LoginPage({
         <p className="mt-3 text-sm text-mut">Polymarket 高胜率地址筛选终端</p>
 
         <div className="mt-14 flex w-full flex-col items-center">
-          {bot ? (
-            <TelegramWidget bot={bot} />
+          {botId ? (
+            <LoginButton botId={botId} />
           ) : (
-            <p className="text-sm text-down-ink">{ERRORS.config}</p>
-          )}
-          {error && ERRORS[error] && (
-            <p className="mt-5 rounded border border-down/40 bg-down/10 px-3 py-1.5 text-xs text-down-ink">
-              {ERRORS[error]}
-            </p>
+            <p className="text-sm text-down-ink">服务端未配置登录参数</p>
           )}
           <p className="mt-6 text-xs text-mut">
             仅限白名单账号访问,无法登录请联系管理员

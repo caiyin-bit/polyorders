@@ -5,27 +5,30 @@ import {
   isAllowed,
   SESSION_COOKIE,
   SESSION_MAX_AGE,
-  verifyTelegramAuth,
 } from "@/src/auth";
+import { verifyTelegramIdToken } from "@/src/telegram-oidc";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  if (!botToken) {
-    return NextResponse.redirect(new URL("/login?error=config", req.url));
+export async function POST(req: Request) {
+  let idToken = "";
+  try {
+    const body = (await req.json()) as { id_token?: string };
+    idToken = String(body.id_token ?? "");
+  } catch {}
+  if (!idToken) {
+    return NextResponse.json({ error: "invalid" }, { status: 400 });
   }
 
-  const user = await verifyTelegramAuth(url.searchParams, botToken);
+  const user = await verifyTelegramIdToken(idToken);
   if (!user) {
-    return NextResponse.redirect(new URL("/login?error=invalid", req.url));
+    return NextResponse.json({ error: "invalid" }, { status: 401 });
   }
   if (!isAllowed(user.id)) {
-    return NextResponse.redirect(new URL("/login?error=denied", req.url));
+    return NextResponse.json({ error: "denied" }, { status: 403 });
   }
 
-  const res = NextResponse.redirect(new URL("/", req.url));
+  const res = NextResponse.json({ ok: true });
   const secure = process.env.NODE_ENV === "production";
   res.cookies.set(SESSION_COOKIE, await createSession(user), {
     httpOnly: true,
@@ -35,12 +38,16 @@ export async function GET(req: Request) {
     path: "/",
   });
   // 仅供页头展示用户名,不参与鉴权
-  res.cookies.set(DISPLAY_COOKIE, user.username ?? user.first_name ?? String(user.id), {
-    httpOnly: false,
-    secure,
-    sameSite: "lax",
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
+  res.cookies.set(
+    DISPLAY_COOKIE,
+    user.username ?? user.first_name ?? String(user.id),
+    {
+      httpOnly: false,
+      secure,
+      sameSite: "lax",
+      maxAge: SESSION_MAX_AGE,
+      path: "/",
+    },
+  );
   return res;
 }

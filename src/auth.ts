@@ -32,30 +32,11 @@ export type TelegramUser = {
   username?: string;
 };
 
-/** 校验 Telegram Login Widget 回调参数(官方 HMAC 方案),1 天内有效 */
-export async function verifyTelegramAuth(
-  params: URLSearchParams,
-  botToken: string,
-): Promise<TelegramUser | null> {
-  const hash = params.get("hash");
-  if (!hash) return null;
-  const dataCheckString = [...params.entries()]
-    .filter(([k]) => k !== "hash")
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([k, v]) => `${k}=${v}`)
-    .join("\n");
-  const secretKey = await crypto.subtle.digest("SHA-256", enc.encode(botToken));
-  if ((await hmacHex(secretKey, dataCheckString)) !== hash) return null;
-
-  const authDate = Number(params.get("auth_date"));
-  if (!authDate || Date.now() / 1000 - authDate > 86_400) return null;
-  const id = Number(params.get("id"));
-  if (!Number.isInteger(id)) return null;
-  return {
-    id,
-    first_name: params.get("first_name") ?? undefined,
-    username: params.get("username") ?? undefined,
-  };
+/** Bot 数字 ID(即 token 冒号前的部分,也是 id_token 的 aud),非敏感 */
+export function telegramBotId(): string {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN 未配置");
+  return token.split(":")[0];
 }
 
 export function isAllowed(id: number): boolean {
