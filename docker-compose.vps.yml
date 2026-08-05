@@ -24,6 +24,8 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
+      # 容器网络无 IPv6,Node fetch 对 AAAA 记录不回退,强制 IPv4 优先
+      NODE_OPTIONS: --dns-result-order=ipv4first
     ports:
       - "127.0.0.1:3000:3000" # 仅本机调试用,外网入口走 caddy
 
@@ -35,6 +37,8 @@ services:
         DATABASE_URL: ${DATABASE_URL}
     restart: unless-stopped
     env_file: .env
+    environment:
+      NODE_OPTIONS: --dns-result-order=ipv4first
     volumes:
       - fetch_logs:/var/log/fetch
 
