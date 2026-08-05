@@ -74,6 +74,8 @@ export async function GET() {
   const c = countsRes.rows[0];
   return Response.json({
     running,
+    // Vercel serverless 无常驻进程,线上不支持手动触发(抓取由 GitHub Actions 定时执行)
+    canRun: !process.env.VERCEL,
     current: currentRes?.rows[0] ?? null,
     counts: {
       candidates: c.candidates,

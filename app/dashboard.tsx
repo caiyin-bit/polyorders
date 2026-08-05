@@ -64,6 +64,7 @@ type Config = {
 
 type FetchStatus = {
   running: boolean;
+  canRun?: boolean;
   current: { step: string; started_at: number } | null;
   counts: {
     candidates: number;
@@ -237,6 +238,7 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
   const [status, setStatus] = useState<FetchStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const running = status?.running ?? false;
+  const canRun = status?.canRun;
 
   const poll = useCallback(async (): Promise<boolean> => {
     try {
@@ -266,8 +268,19 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
     setError(null);
     try {
       const res = await fetch("/api/fetch", { method: "POST" });
-      if (res.status === 409) setError("已有抓取进程在运行");
-      else await poll();
+      if (res.ok) {
+        await poll();
+        return;
+      }
+      if (res.status === 409) {
+        setError("已有抓取进程在运行");
+        return;
+      }
+      // 501:线上环境无常驻进程,抓取由 GitHub Actions 定时执行
+      const body = (await res.json().catch(() => null)) as {
+        reason?: string;
+      } | null;
+      setError(body?.reason ?? `启动失败(HTTP ${res.status})`);
     } catch {
       setError("启动失败");
     }
@@ -318,13 +331,23 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
         </h2>
         <button
           onClick={start}
-          disabled={running}
+          disabled={running || canRun === false}
+          title={
+            canRun === false
+              ? "线上环境由 GitHub Actions 定时抓取,如需手动触发请在 GitHub 运行 fetch / live 工作流"
+              : undefined
+          }
           className="rounded border border-accent/60 px-2.5 py-1 font-mono text-[11px] text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:border-line disabled:text-mut"
         >
           {running ? "RUNNING" : "RUN"}
         </button>
       </div>
       {error && <p className="mb-2 text-[11px] text-down-ink">{error}</p>}
+      {canRun === false && !error && (
+        <p className="mb-2 text-[11px] text-mut">
+          线上由 GitHub Actions 定时抓取(每日全量 · 每 2 小时动向)
+        </p>
+      )}
       {running && liveSteps && (
         <div className="mb-3">
           <div className="grid grid-cols-4 gap-1">
