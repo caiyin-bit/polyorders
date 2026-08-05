@@ -20,6 +20,18 @@ function externalFetchRunning(): boolean {
   }
 }
 
+// 抓取可能由其他容器(scheduler 定时)执行,进程探测看不见,
+// 以 fetch_runs 未完结记录作为跨容器的"进行中"信号;超过 6 小时视为残留脏数据
+const STALE_RUN_MS = 6 * 3600_000;
+
+async function dbCurrentRun(): Promise<{ step: string; started_at: number } | null> {
+  const { rows } = await query<{ step: string; started_at: number }>(
+    "SELECT step, started_at FROM fetch_runs WHERE finished_at IS NULL AND started_at > $1 ORDER BY id DESC LIMIT 1",
+    [Date.now() - STALE_RUN_MS],
+  );
+  return rows[0] ?? null;
+}
+
 export async function POST() {
   // Vercel serverless 无常驻进程,线上抓取由 GitHub Actions 定时执行
   if (process.env.VERCEL) {
@@ -28,7 +40,7 @@ export async function POST() {
       { status: 501 },
     );
   }
-  if (childRunning() || externalFetchRunning()) {
+  if (childRunning() || externalFetchRunning() || (await dbCurrentRun())) {
     return Response.json(
       { started: false, reason: "already_running" },
       { status: 409 },
@@ -47,14 +59,8 @@ export async function POST() {
 }
 
 export async function GET() {
-  const running = childRunning() || externalFetchRunning();
-
-  const [currentRes, countsRes] = await Promise.all([
-    running
-      ? query<{ step: string; started_at: number }>(
-          "SELECT step, started_at FROM fetch_runs WHERE finished_at IS NULL ORDER BY id DESC LIMIT 1",
-        )
-      : Promise.resolve(null),
+  const [current, countsRes] = await Promise.all([
+    dbCurrentRun(),
     query<{
       candidates: number;
       prefiltered: number;
@@ -73,10 +79,10 @@ export async function GET() {
 
   const c = countsRes.rows[0];
   return Response.json({
-    running,
+    running: childRunning() || externalFetchRunning() || current !== null,
     // Vercel serverless 无常驻进程,线上不支持手动触发(抓取由 GitHub Actions 定时执行)
     canRun: !process.env.VERCEL,
-    current: currentRes?.rows[0] ?? null,
+    current,
     counts: {
       candidates: c.candidates,
       prefiltered: c.prefiltered,

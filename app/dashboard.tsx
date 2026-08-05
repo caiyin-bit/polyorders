@@ -213,6 +213,7 @@ const STEP_LABELS: Record<string, string> = {
   prefilter: "② 初筛",
   positions: "③ 仓位",
   score: "④ 评分",
+  live: "⑤ 动向",
 };
 
 function fmtClock(ms: number): string {
@@ -264,6 +265,13 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
     return () => clearInterval(timer);
   }, [running, poll, router]);
 
+  // 空闲时慢轮询:感知 scheduler 定时任务(跨容器)的启动
+  useEffect(() => {
+    if (running) return;
+    const timer = setInterval(poll, 30_000);
+    return () => clearInterval(timer);
+  }, [running, poll]);
+
   async function start() {
     setError(null);
     try {
@@ -288,19 +296,21 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
 
   const c = status?.counts;
   const currentStep = status?.current?.step ?? null;
-  const STEP_ORDER = ["candidates", "prefilter", "positions", "score"];
+  const STEP_ORDER = ["candidates", "prefilter", "positions", "score", "live"];
   const currentIdx = currentStep ? STEP_ORDER.indexOf(currentStep) : -1;
 
   const liveSteps = c
     ? [
         {
           key: "candidates",
-          done: c.candidates,
+          done: c.candidates as number | null,
           total: status?.targets?.candidates ?? null,
         },
         { key: "prefilter", done: c.prefiltered, total: c.candidates || null },
         { key: "positions", done: c.positionsFetched, total: c.passed || null },
         { key: "score", done: c.scored, total: null },
+        // live(Top N 持仓/成交)无总量计数,进行中为不确定态
+        { key: "live", done: null, total: null },
       ].map((s, i) => {
         const active = i === currentIdx;
         // 当前步骤之后的计数来自上一轮,弱化显示避免误读为本轮已完成
@@ -308,10 +318,10 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
         // score 步骤无确定总量:进行中为不确定态,否则按是否已出结果显示 0/100
         const pct =
           s.total !== null
-            ? Math.min(100, Math.round((s.done / s.total) * 100))
+            ? Math.min(100, Math.round(((s.done ?? 0) / s.total) * 100))
             : active
               ? null
-              : s.done > 0
+              : (s.done ?? 0) > 0
                 ? 100
                 : 0;
         return { ...s, active, upcoming, pct };
@@ -350,7 +360,7 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
       )}
       {running && liveSteps && (
         <div className="mb-3">
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-5 gap-1">
             {liveSteps.map((s) => (
               <div
                 key={s.key}
@@ -369,7 +379,7 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
                   </span>
                 </div>
                 <div className="mt-0.5 text-center font-mono text-[11px] tabular-nums">
-                  {s.done}
+                  {s.done !== null ? s.done : "…"}
                   {s.total !== null && (
                     <span className="text-mut">/{s.total}</span>
                   )}
