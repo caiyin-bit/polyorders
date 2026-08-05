@@ -7,3 +7,5 @@ next-env.d.ts
 .env
 .pnpm-store/
 supabase/.temp/
+.vercel
+.env*
