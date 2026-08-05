@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "start": "next start",
     "fetch": "tsx src/fetch/index.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "typecheck": "tsc --noEmit"
