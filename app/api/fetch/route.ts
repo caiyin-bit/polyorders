@@ -1,6 +1,7 @@
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { openSync } from "node:fs";
-import { getDb } from "@/src/db";
+import { LEADERBOARD } from "@/src/config";
+import { query } from "@/src/db";
 
 export const dynamic = "force-dynamic";
 
@@ -39,15 +40,43 @@ export async function POST() {
 }
 
 export async function GET() {
-  const last = getDb()
-    .prepare(
-      "SELECT step, started_at, finished_at, error FROM fetch_runs ORDER BY id DESC LIMIT 1",
-    )
-    .get() as
-    | { step: string; started_at: number; finished_at: number | null; error: string | null }
-    | undefined;
+  const running = childRunning() || externalFetchRunning();
+
+  const [currentRes, countsRes] = await Promise.all([
+    running
+      ? query<{ step: string; started_at: number }>(
+          "SELECT step, started_at FROM fetch_runs WHERE finished_at IS NULL ORDER BY id DESC LIMIT 1",
+        )
+      : Promise.resolve(null),
+    query<{
+      candidates: number;
+      prefiltered: number;
+      passed: number;
+      positions_fetched: number;
+      scored: number;
+    }>(
+      `SELECT
+         (SELECT COUNT(*)::int FROM candidates) AS candidates,
+         (SELECT COUNT(*)::int FROM candidates WHERE markets_traded IS NOT NULL) AS prefiltered,
+         (SELECT COUNT(*)::int FROM candidates WHERE passed_prefilter) AS passed,
+         (SELECT COUNT(*)::int FROM candidates WHERE positions_fetched_at IS NOT NULL) AS positions_fetched,
+         (SELECT COUNT(*)::int FROM scores WHERE rank IS NOT NULL) AS scored`,
+    ),
+  ]);
+
+  const c = countsRes.rows[0];
   return Response.json({
-    running: childRunning() || externalFetchRunning(),
-    lastRun: last ?? null,
+    running,
+    current: currentRes?.rows[0] ?? null,
+    counts: {
+      candidates: c.candidates,
+      prefiltered: c.prefiltered,
+      passed: c.passed,
+      positionsFetched: c.positions_fetched,
+      scored: c.scored,
+    },
+    targets: {
+      candidates: LEADERBOARD.maxOffset,
+    },
   });
 }

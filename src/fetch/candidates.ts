@@ -1,5 +1,5 @@
 import { DATA_API, LEADERBOARD } from "../config";
-import { getDb } from "../db";
+import { query, withTransaction } from "../db";
 import { fetchJson } from "../http";
 
 type LeaderboardEntry = {
@@ -11,27 +11,15 @@ type LeaderboardEntry = {
 };
 
 export async function fetchCandidates(force = false): Promise<number> {
-  const db = getDb();
   if (!force) {
-    const { n } = db
-      .prepare("SELECT COUNT(*) AS n FROM candidates")
-      .get() as { n: number };
-    if (n > 0) {
-      console.log(`candidates: skip, ${n} rows exist (use --force to refetch)`);
-      return n;
+    const { rows } = await query<{ n: number }>(
+      "SELECT COUNT(*)::int AS n FROM candidates",
+    );
+    if (rows[0].n > 0) {
+      console.log(`candidates: skip, ${rows[0].n} rows exist (use --force to refetch)`);
+      return rows[0].n;
     }
   }
-
-  const insert = db.prepare(`
-    INSERT INTO candidates (address, username, leaderboard_pnl, leaderboard_vol, rank, fetched_at)
-    VALUES (@address, @username, @pnl, @vol, @rank, @fetchedAt)
-    ON CONFLICT(address) DO UPDATE SET
-      username = excluded.username,
-      leaderboard_pnl = excluded.leaderboard_pnl,
-      leaderboard_vol = excluded.leaderboard_vol,
-      rank = excluded.rank,
-      fetched_at = excluded.fetched_at
-  `);
 
   let total = 0;
   for (
@@ -46,18 +34,28 @@ export async function fetchCandidates(force = false): Promise<number> {
     if (rows.length === 0) break;
 
     const now = Date.now();
-    db.transaction((items: LeaderboardEntry[]) => {
-      for (const r of items) {
-        insert.run({
-          address: r.proxyWallet,
-          username: r.userName ?? null,
-          pnl: r.pnl ?? null,
-          vol: r.vol ?? null,
-          rank: Number(r.rank),
-          fetchedAt: now,
-        });
+    await withTransaction(async (client) => {
+      for (const r of rows) {
+        await client.query(
+          `INSERT INTO candidates (address, username, leaderboard_pnl, leaderboard_vol, rank, fetched_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (address) DO UPDATE SET
+             username = EXCLUDED.username,
+             leaderboard_pnl = EXCLUDED.leaderboard_pnl,
+             leaderboard_vol = EXCLUDED.leaderboard_vol,
+             rank = EXCLUDED.rank,
+             fetched_at = EXCLUDED.fetched_at`,
+          [
+            r.proxyWallet,
+            r.userName ?? null,
+            r.pnl ?? null,
+            r.vol ?? null,
+            Number(r.rank),
+            now,
+          ],
+        );
       }
-    })(rows);
+    });
 
     total += rows.length;
     console.log(`candidates: offset=${offset} got=${rows.length}`);

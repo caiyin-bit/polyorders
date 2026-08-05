@@ -1,74 +1,44 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
-import { DB_PATH } from "./config";
+import { Pool, type PoolClient, types } from "pg";
 
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS candidates (
-  address TEXT PRIMARY KEY,
-  username TEXT,
-  leaderboard_pnl REAL,
-  leaderboard_vol REAL,
-  rank INTEGER,
-  markets_traded INTEGER,
-  passed_prefilter INTEGER,
-  positions_fetched_at INTEGER,
-  fetched_at INTEGER
-);
+// pg 对 int8/numeric 默认返回字符串;本项目数值均在 JS 安全整数/浮点范围内,统一转 number
+types.setTypeParser(types.builtins.INT8, Number);
+types.setTypeParser(types.builtins.NUMERIC, Number);
 
-CREATE TABLE IF NOT EXISTS closed_positions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  address TEXT NOT NULL,
-  condition_id TEXT NOT NULL,
-  title TEXT,
-  outcome TEXT,
-  avg_price REAL,
-  total_bought REAL,
-  realized_pnl REAL NOT NULL,
-  timestamp INTEGER,
-  UNIQUE(address, condition_id, outcome, timestamp)
-);
-CREATE INDEX IF NOT EXISTS idx_cp_addr ON closed_positions(address);
-CREATE INDEX IF NOT EXISTS idx_cp_addr_ts ON closed_positions(address, timestamp);
+const DEFAULT_URL = "postgres://polyorders:polyorders@localhost:5432/polyorders";
 
-CREATE TABLE IF NOT EXISTS scores (
-  address TEXT PRIMARY KEY,
-  total_positions INTEGER,
-  winning_positions INTEGER,
-  win_rate REAL,
-  total_realized_pnl REAL,
-  avg_pnl REAL,
-  score REAL,
-  rank INTEGER,
-  computed_at INTEGER
-);
+// 挂 globalThis 防止 Next.js dev HMR 重载模块时泄漏连接池
+const g = globalThis as unknown as { __pgPool?: Pool };
 
-CREATE TABLE IF NOT EXISTS fetch_runs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  step TEXT,
-  started_at INTEGER,
-  finished_at INTEGER,
-  addresses_ok INTEGER,
-  addresses_failed INTEGER,
-  error TEXT
-);
+export function getPool(): Pool {
+  if (!g.__pgPool) {
+    g.__pgPool = new Pool({
+      connectionString: process.env.DATABASE_URL ?? DEFAULT_URL,
+      max: 10,
+    });
+  }
+  return g.__pgPool;
+}
 
-CREATE TABLE IF NOT EXISTS markets (
-  condition_id TEXT PRIMARY KEY,
-  slug TEXT,
-  event_slug TEXT,
-  fetched_at INTEGER
-);
-`;
+export function query<T extends Record<string, unknown> = Record<string, unknown>>(
+  text: string,
+  params?: unknown[],
+) {
+  return getPool().query<T>(text, params as never[]);
+}
 
-let instance: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (instance) return instance;
-  mkdirSync(dirname(DB_PATH), { recursive: true });
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.exec(SCHEMA);
-  instance = db;
-  return db;
+export async function withTransaction<T>(
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }

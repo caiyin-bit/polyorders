@@ -1,4 +1,4 @@
-import { getDb } from "../db";
+import { getPool, query } from "../db";
 import { fetchCandidates } from "./candidates";
 import { fetchPositions } from "./positions";
 import { prefilter } from "./prefilter";
@@ -14,21 +14,24 @@ function runStep(
   fn: () => Promise<{ ok?: number; failed?: number } | void>,
 ) {
   return async () => {
-    const db = getDb();
-    const runId = db
-      .prepare("INSERT INTO fetch_runs (step, started_at) VALUES (?, ?)")
-      .run(name, Date.now()).lastInsertRowid;
+    const { rows } = await query<{ id: number }>(
+      "INSERT INTO fetch_runs (step, started_at) VALUES ($1, $2) RETURNING id",
+      [name, Date.now()],
+    );
+    const runId = rows[0].id;
     const started = Date.now();
     try {
       const result = await fn();
-      db.prepare(
-        "UPDATE fetch_runs SET finished_at = ?, addresses_ok = ?, addresses_failed = ? WHERE id = ?",
-      ).run(Date.now(), result?.ok ?? null, result?.failed ?? null, runId);
+      await query(
+        "UPDATE fetch_runs SET finished_at = $1, addresses_ok = $2, addresses_failed = $3 WHERE id = $4",
+        [Date.now(), result?.ok ?? null, result?.failed ?? null, runId],
+      );
       console.log(`${name}: done in ${((Date.now() - started) / 1000).toFixed(1)}s`);
     } catch (err) {
-      db.prepare(
-        "UPDATE fetch_runs SET finished_at = ?, error = ? WHERE id = ?",
-      ).run(Date.now(), String(err), runId);
+      await query(
+        "UPDATE fetch_runs SET finished_at = $1, error = $2 WHERE id = $3",
+        [Date.now(), String(err), runId],
+      );
       throw err;
     }
   };
@@ -46,10 +49,7 @@ async function main() {
     ),
     "2": runStep("prefilter", () => prefilter(force, max)),
     "3": runStep("positions", () => fetchPositions(force, max)),
-    "4": runStep("score", () => {
-      const r = computeScores();
-      return Promise.resolve({ ok: r.total });
-    }),
+    "4": runStep("score", () => computeScores().then((r) => ({ ok: r.total }))),
   };
 
   const selected = step ? [step] : Object.keys(steps);
@@ -58,6 +58,7 @@ async function main() {
     if (!fn) throw new Error(`unknown step: ${key}`);
     await fn();
   }
+  await getPool().end();
 }
 
 main().catch((err) => {

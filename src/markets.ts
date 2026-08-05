@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+import { query, withTransaction } from "./db";
 import { createLimiter, fetchJson, sleep } from "./http";
 
 const GAMMA_API = "https://gamma-api.polymarket.com";
@@ -30,20 +30,20 @@ async function fetchBatch(
 export async function getEventSlugs(
   conditionIds: string[],
 ): Promise<Map<string, string>> {
-  const db = getDb();
   const result = new Map<string, string>();
-  const missing: string[] = [];
+  if (conditionIds.length === 0) return result;
 
-  const cached = db.prepare(
-    "SELECT condition_id, event_slug FROM markets WHERE condition_id = ?",
-  );
-  for (const id of conditionIds) {
-    const row = cached.get(id) as
-      | { condition_id: string; event_slug: string | null }
-      | undefined;
-    if (row === undefined) missing.push(id);
-    else if (row.event_slug) result.set(id, row.event_slug);
+  const { rows: cached } = await query<{
+    condition_id: string;
+    event_slug: string | null;
+  }>("SELECT condition_id, event_slug FROM markets WHERE condition_id = ANY($1)", [
+    conditionIds,
+  ]);
+  const known = new Set(cached.map((r) => r.condition_id));
+  for (const r of cached) {
+    if (r.event_slug) result.set(r.condition_id, r.event_slug);
   }
+  const missing = conditionIds.filter((id) => !known.has(id));
   if (missing.length === 0) return result;
 
   const found = new Map<string, { slug: string | null; eventSlug: string | null }>();
@@ -71,18 +71,18 @@ export async function getEventSlugs(
     );
   }
 
-  const insert = db.prepare(
-    `INSERT INTO markets (condition_id, slug, event_slug, fetched_at)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(condition_id) DO UPDATE SET
-       slug = excluded.slug, event_slug = excluded.event_slug, fetched_at = excluded.fetched_at`,
-  );
   const now = Date.now();
-  db.transaction(() => {
+  await withTransaction(async (client) => {
     for (const [id, f] of found) {
-      insert.run(id, f.slug ?? null, f.eventSlug ?? null, now);
+      await client.query(
+        `INSERT INTO markets (condition_id, slug, event_slug, fetched_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (condition_id) DO UPDATE SET
+           slug = EXCLUDED.slug, event_slug = EXCLUDED.event_slug, fetched_at = EXCLUDED.fetched_at`,
+        [id, f.slug ?? null, f.eventSlug ?? null, now],
+      );
     }
-  })();
+  });
   for (const [id, f] of found) {
     const link = f.eventSlug ?? f.slug;
     if (link) result.set(id, link);

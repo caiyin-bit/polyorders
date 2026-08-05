@@ -4,3 +4,5 @@ data
 next-env.d.ts
 *.tsbuildinfo
 .gstack/
+.env
+.pnpm-store/

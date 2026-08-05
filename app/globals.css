@@ -1,20 +1,59 @@
 @import "tailwindcss";
 
-@theme {
-  --color-bg: #0b0c0f;
-  --color-panel: #111318;
-  --color-panel2: #171a20;
-  --color-line: #23262e;
-  --color-ink: #e6e8eb;
-  --color-ink2: #9aa2ad;
-  --color-mut: #667085;
-  --color-up: #059669;
-  --color-down: #ef4444;
-  --color-up-ink: #34d399;
-  --color-down-ink: #f87171;
-  --color-accent: #3987e5;
+/* 语义 token 映射到运行时 CSS 变量,.dark 切换时全部类名自动换色 */
+@theme inline {
+  --color-bg: var(--t-bg);
+  --color-panel: var(--t-panel);
+  --color-panel2: var(--t-panel2);
+  --color-line: var(--t-line);
+  --color-ink: var(--t-ink);
+  --color-ink2: var(--t-ink2);
+  --color-mut: var(--t-mut);
+  --color-up: var(--t-up);
+  --color-down: var(--t-down);
+  --color-up-ink: var(--t-up-ink);
+  --color-down-ink: var(--t-down-ink);
+  --color-accent: var(--t-accent);
 }
 
-html {
+:root {
+  color-scheme: light;
+  --t-bg: #f5f6f8;
+  --t-panel: #ffffff;
+  --t-panel2: #eef0f3;
+  --t-line: #dcdfe5;
+  --t-ink: #1a1d21;
+  --t-ink2: #4b5563;
+  --t-mut: #8a919c;
+  --t-up: #059669;
+  --t-down: #dc2626;
+  --t-up-ink: #047857;
+  --t-down-ink: #b91c1c;
+  --t-accent: #2a78d6;
+  --funnel-1: #86b6ef;
+  --funnel-2: #5598e7;
+  --funnel-3: #2a78d6;
+  --funnel-4: #1c5cab;
+  --funnel-5: #104281;
+}
+
+.dark {
   color-scheme: dark;
+  --t-bg: #0b0c0f;
+  --t-panel: #111318;
+  --t-panel2: #171a20;
+  --t-line: #23262e;
+  --t-ink: #e6e8eb;
+  --t-ink2: #9aa2ad;
+  --t-mut: #667085;
+  --t-up: #059669;
+  --t-down: #ef4444;
+  --t-up-ink: #34d399;
+  --t-down-ink: #f87171;
+  --t-accent: #3987e5;
+  --funnel-1: #86b6ef;
+  --funnel-2: #5598e7;
+  --funnel-3: #3987e5;
+  --funnel-4: #256abf;
+  --funnel-5: #1c5cab;
 }

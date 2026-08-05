@@ -1,5 +1,5 @@
 import { DATA_API } from "../config";
-import { getDb } from "../db";
+import { query } from "../db";
 import { createLimiter, fetchJson } from "../http";
 
 type ClosedPosition = {
@@ -15,19 +15,52 @@ type ClosedPosition = {
 const PAGE_SIZE = 50;
 const MAX_OFFSET = 100_000;
 
+async function insertPage(address: string, items: ClosedPosition[]) {
+  // 页内按去重键去重,避免同一语句对同一行冲突两次
+  const byKey = new Map<string, ClosedPosition>();
+  for (const p of items) byKey.set(`${p.conditionId}|${p.outcome ?? ""}`, p);
+  const rows = [...byKey.values()];
+
+  const values: unknown[] = [];
+  const tuples = rows.map((p, i) => {
+    values.push(
+      address,
+      p.conditionId,
+      p.title ?? null,
+      p.outcome ?? null,
+      p.avgPrice ?? null,
+      p.totalBought ?? null,
+      p.realizedPnl,
+      p.timestamp ?? null,
+    );
+    const b = i * 8;
+    return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8})`;
+  });
+
+  await query(
+    `INSERT INTO closed_positions
+       (address, condition_id, title, outcome, avg_price, total_bought, realized_pnl, "timestamp")
+     VALUES ${tuples.join(",")}
+     ON CONFLICT (address, condition_id, outcome) DO UPDATE SET
+       title = EXCLUDED.title,
+       avg_price = EXCLUDED.avg_price,
+       total_bought = EXCLUDED.total_bought,
+       realized_pnl = EXCLUDED.realized_pnl,
+       "timestamp" = EXCLUDED."timestamp"`,
+    values,
+  );
+}
+
 export async function fetchPositions(
   force = false,
   max?: number,
 ): Promise<{ ok: number; failed: number }> {
-  const db = getDb();
-  const pending = db
-    .prepare(
-      `SELECT address FROM candidates
-       WHERE passed_prefilter = 1
-         AND ${force ? "1=1" : "positions_fetched_at IS NULL"}
-       ORDER BY rank`,
-    )
-    .all() as Array<{ address: string }>;
+  const { rows: pending } = await query<{ address: string }>(
+    `SELECT address FROM candidates
+     WHERE passed_prefilter
+       AND ${force ? "TRUE" : "positions_fetched_at IS NULL"}
+     ORDER BY rank`,
+  );
 
   const targets = max ? pending.slice(0, max) : pending;
   if (targets.length === 0) {
@@ -35,16 +68,6 @@ export async function fetchPositions(
     return { ok: 0, failed: 0 };
   }
 
-  const insert = db.prepare(`
-    INSERT INTO closed_positions
-      (address, condition_id, title, outcome, avg_price, total_bought, realized_pnl, timestamp)
-    VALUES
-      (@address, @conditionId, @title, @outcome, @avgPrice, @totalBought, @realizedPnl, @timestamp)
-    ON CONFLICT(address, condition_id, outcome, timestamp) DO NOTHING
-  `);
-  const markDone = db.prepare(
-    "UPDATE candidates SET positions_fetched_at = ? WHERE address = ?",
-  );
   const limiter = createLimiter(3, 250);
   let ok = 0;
   let failed = 0;
@@ -59,27 +82,17 @@ export async function fetchPositions(
         ),
       );
       if (page.length === 0) break;
-      db.transaction((items: ClosedPosition[]) => {
-        for (const p of items) {
-          insert.run({
-            address,
-            conditionId: p.conditionId,
-            title: p.title ?? null,
-            outcome: p.outcome ?? null,
-            avgPrice: p.avgPrice ?? null,
-            totalBought: p.totalBought ?? null,
-            realizedPnl: p.realizedPnl,
-            timestamp: p.timestamp ?? null,
-          });
-        }
-      })(page);
+      await insertPage(address, page);
       rows += page.length;
       if (rows % 5000 === 0) {
         console.log(`positions: ${address.slice(0, 10)}… ${rows} rows so far`);
       }
       if (page.length < PAGE_SIZE) break;
     }
-    markDone.run(Date.now(), address);
+    await query(
+      "UPDATE candidates SET positions_fetched_at = $1 WHERE address = $2",
+      [Date.now(), address],
+    );
     return rows;
   }
 

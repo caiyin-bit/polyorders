@@ -1,71 +1,50 @@
 import { SCORE_MAX_POSITIONS, SCORE_MIN_POSITIONS } from "../config";
-import { getDb } from "../db";
+import { withTransaction } from "../db";
 
-type Aggregate = {
-  address: string;
+export async function computeScores(): Promise<{
   total: number;
-  wins: number;
-  totalPnl: number | null;
-  avgPnl: number | null;
-};
-
-function isQualified(total: number): boolean {
-  return total >= SCORE_MIN_POSITIONS && total < SCORE_MAX_POSITIONS;
-}
-
-export function computeScores(): { total: number; qualified: number } {
-  const db = getDb();
-  const rows = db
-    .prepare(
-      `SELECT address,
-              COUNT(*) AS total,
-              SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
-              SUM(realized_pnl) AS totalPnl,
-              AVG(realized_pnl) AS avgPnl
-       FROM closed_positions
-       GROUP BY address`,
-    )
-    .all() as Aggregate[];
-
-  const qualified = rows
-    .filter((r) => isQualified(r.total))
-    .map((r) => ({
-      ...r,
-      score: (r.wins / r.total) * Math.log(r.total),
-    }))
-    .sort((a, b) => b.score - a.score);
-  const rankOf = new Map(qualified.map((r, i) => [r.address, i + 1]));
-
-  const insert = db.prepare(`
-    INSERT INTO scores
-      (address, total_positions, winning_positions, win_rate, total_realized_pnl, avg_pnl, score, rank, computed_at)
-    VALUES
-      (@address, @total, @wins, @winRate, @totalPnl, @avgPnl, @score, @rank, @computedAt)
-  `);
-
+  qualified: number;
+}> {
   const now = Date.now();
-  db.transaction(() => {
-    db.prepare("DELETE FROM scores").run();
-    for (const r of rows) {
-      const rank = rankOf.get(r.address) ?? null;
-      insert.run({
-        address: r.address,
-        total: r.total,
-        wins: r.wins,
-        winRate: r.total > 0 ? r.wins / r.total : 0,
-        totalPnl: r.totalPnl,
-        avgPnl: r.avgPnl,
-        score: isQualified(r.total)
-          ? (r.wins / r.total) * Math.log(r.total)
-          : null,
-        rank,
-        computedAt: now,
-      });
-    }
-  })();
-
-  console.log(
-    `score: ${rows.length} addresses, ${qualified.length} qualified (${SCORE_MIN_POSITIONS}–${SCORE_MAX_POSITIONS} positions)`,
-  );
-  return { total: rows.length, qualified: qualified.length };
+  return withTransaction(async (client) => {
+    await client.query("DELETE FROM scores");
+    const res = await client.query(
+      `WITH agg AS (
+         SELECT address,
+                COUNT(*)::int AS total,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END)::int AS wins,
+                SUM(realized_pnl)::float8 AS total_pnl,
+                AVG(realized_pnl)::float8 AS avg_pnl
+         FROM closed_positions
+         GROUP BY address
+       ), scored AS (
+         SELECT *,
+                CASE WHEN total >= $1 AND total < $2
+                     THEN (wins::float8 / total) * ln(total) END AS score
+         FROM agg
+       ), ranked AS (
+         SELECT *,
+                CASE WHEN score IS NOT NULL
+                     THEN (row_number() OVER (ORDER BY score DESC NULLS LAST))::int
+                END AS rank
+         FROM scored
+       )
+       INSERT INTO scores
+         (address, total_positions, winning_positions, win_rate,
+          total_realized_pnl, avg_pnl, score, rank, computed_at)
+       SELECT address, total, wins, wins::float8 / total,
+              total_pnl, avg_pnl, score, rank, $3
+       FROM ranked`,
+      [SCORE_MIN_POSITIONS, SCORE_MAX_POSITIONS, now],
+    );
+    const total = res.rowCount ?? 0;
+    const q = await client.query(
+      "SELECT COUNT(*)::int AS n FROM scores WHERE rank IS NOT NULL",
+    );
+    const qualified = q.rows[0].n as number;
+    console.log(
+      `score: ${total} addresses, ${qualified} qualified (${SCORE_MIN_POSITIONS}–${SCORE_MAX_POSITIONS} positions)`,
+    );
+    return { total, qualified };
+  });
 }

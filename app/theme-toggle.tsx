@@ -22,7 +22,7 @@ export default function ThemeToggle() {
     <button
       onClick={toggle}
       aria-label="切换明暗主题"
-      className="rounded-lg border border-zinc-300 p-2 text-zinc-500 hover:border-zinc-400 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-100"
+      className="rounded border border-line p-1.5 text-ink2 hover:border-mut hover:text-ink"
     >
       {dark === null ? (
         <span className="block h-4 w-4" />
