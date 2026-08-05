@@ -423,15 +423,25 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
 
 /* ---------- 行内最新动向 ---------- */
 
-function FeedLines({ trades }: { trades: TradeLine[] }) {
+function FeedLines({
+  trades,
+  roomy = false,
+}: {
+  trades: TradeLine[];
+  roomy?: boolean;
+}) {
   return (
-    <ul className="space-y-1 border-l-2 border-line pl-3">
+    <ul
+      className={`${roomy ? "space-y-2" : "space-y-1"} border-l-2 border-line pl-3`}
+    >
       {trades.map((t, i) => {
         const buy = t.side === "BUY";
         return (
           <li
             key={i}
-            className="flex items-center gap-2 font-mono text-[11px] text-mut"
+            className={`flex items-center gap-2 font-mono text-mut ${
+              roomy ? "py-0.5 text-xs" : "text-[11px]"
+            }`}
           >
             <span
               className={`shrink-0 rounded px-1 py-px text-[10px] font-semibold ${
@@ -701,8 +711,8 @@ function WalletModal({
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative flex max-h-[88vh] w-full max-w-[1120px] flex-col rounded-lg border border-line bg-panel shadow-2xl">
-        <div className="flex shrink-0 items-start justify-between border-b border-line px-5 py-4">
+      <div className="relative flex max-h-[92vh] w-[94vw] max-w-[1600px] flex-col rounded-lg border border-line bg-panel shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between border-b border-line px-6 py-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="font-mono text-base font-semibold">
@@ -741,12 +751,12 @@ function WalletModal({
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 lg:overflow-hidden">
-          <div className="grid shrink-0 grid-cols-3 gap-2 sm:grid-cols-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-5 lg:overflow-hidden">
+          <div className="grid shrink-0 grid-cols-3 gap-2.5 sm:grid-cols-6">
             {stats.map((st) => (
               <div
                 key={st.label}
-                className="rounded border border-line bg-panel2 px-2 py-2 text-center"
+                className="rounded border border-line bg-panel2 px-3 py-2.5 text-center"
               >
                 <div className="font-mono text-sm font-semibold tabular-nums">
                   {st.value}
@@ -756,8 +766,8 @@ function WalletModal({
             ))}
           </div>
 
-          <div className="mt-4 grid grid-cols-1 gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
-            <section className="min-h-0 lg:overflow-y-auto lg:pr-1">
+          <div className="mt-5 grid grid-cols-1 gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
+            <section className="min-h-0 lg:overflow-y-auto lg:pr-2">
               <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
                 最新动向
               </h3>
@@ -775,17 +785,17 @@ function WalletModal({
               <table className="w-full text-left text-xs">
                 <thead className="text-[11px] text-mut">
                   <tr>
-                    <th className="py-1.5 font-normal">市场</th>
-                    <th className="py-1.5 font-normal">方向</th>
-                    <th className="py-1.5 text-right font-normal">数量</th>
-                    <th className="py-1.5 text-right font-normal">均价→现价</th>
-                    <th className="py-1.5 text-right font-normal">浮动盈亏</th>
+                    <th className="py-2 font-normal">市场</th>
+                    <th className="py-2 font-normal">方向</th>
+                    <th className="py-2 text-right font-normal">数量</th>
+                    <th className="py-2 text-right font-normal">均价→现价</th>
+                    <th className="py-2 text-right font-normal">浮动盈亏</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/60">
                   {detail.openPositions.map((p, i) => (
                     <tr key={i}>
-                      <td className="max-w-52 truncate py-1.5 pr-3">
+                      <td className="max-w-64 truncate py-2 pr-3">
                         {p.event_slug ? (
                           <a
                             href={`https://polymarket.com/event/${p.event_slug}`}
@@ -799,16 +809,16 @@ function WalletModal({
                           <span className="text-ink2">{p.title ?? "-"}</span>
                         )}
                       </td>
-                      <td className="py-1.5 pr-3 text-mut">{p.outcome ?? "-"}</td>
-                      <td className="py-1.5 pr-4 text-right font-mono tabular-nums text-mut">
+                      <td className="py-2 pr-3 text-mut">{p.outcome ?? "-"}</td>
+                      <td className="py-2 pr-4 text-right font-mono tabular-nums text-mut">
                         {p.size !== null ? p.size.toFixed(0) : "-"}
                       </td>
-                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-mut">
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-mut">
                         {p.avg_price !== null ? p.avg_price.toFixed(2) : "-"}
                         {" → "}
                         {p.cur_price !== null ? p.cur_price.toFixed(2) : "-"}
                       </td>
-                      <td className="py-1.5 text-right font-mono tabular-nums">
+                      <td className="py-2 text-right font-mono tabular-nums">
                         <Pnl value={p.cash_pnl} />
                       </td>
                     </tr>
@@ -828,14 +838,14 @@ function WalletModal({
                 {!detail ? (
                   <p className="text-xs text-mut">加载中…</p>
                 ) : detail.trades.length > 0 ? (
-                  <FeedLines trades={detail.trades} />
+                  <FeedLines trades={detail.trades} roomy />
                 ) : (
                   <p className="text-xs text-mut">暂无成交数据</p>
                 )}
               </div>
             </section>
 
-            <section className="min-h-0 lg:overflow-y-auto lg:pr-1">
+            <section className="min-h-0 lg:overflow-y-auto lg:pr-2">
               <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
                 已平仓
                 <span className="ml-2 font-mono font-normal text-mut">
@@ -868,23 +878,23 @@ function WalletModal({
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="搜索市场…"
-                className="w-40 rounded border border-line bg-panel2 px-2 py-1 text-xs placeholder-mut focus:border-accent focus:outline-none"
+                className="w-48 rounded border border-line bg-panel2 px-2 py-1 text-xs placeholder-mut focus:border-accent focus:outline-none"
               />
             </div>
             <table className="w-full text-left text-xs">
               <thead className="text-[11px] text-mut">
                 <tr>
-                  <th className="py-1.5 font-normal">市场</th>
-                  <th className="py-1.5 font-normal">方向</th>
-                  <th className="py-1.5 text-right font-normal">均价</th>
-                  <th className="py-1.5 text-right font-normal">盈亏</th>
-                  <th className="py-1.5 text-right font-normal">时间</th>
+                  <th className="py-2 font-normal">市场</th>
+                  <th className="py-2 font-normal">方向</th>
+                  <th className="py-2 text-right font-normal">均价</th>
+                  <th className="py-2 text-right font-normal">盈亏</th>
+                  <th className="py-2 text-right font-normal">时间</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line/60">
                 {(detail?.positions ?? []).map((p, i) => (
                   <tr key={i}>
-                    <td className="max-w-56 truncate py-1.5 pr-3">
+                    <td className="max-w-72 truncate py-2 pr-3">
                       {p.slug ? (
                         <a
                           href={`https://polymarket.com/event/${p.slug}`}
@@ -898,14 +908,14 @@ function WalletModal({
                         <span className="text-ink2">{p.title ?? "-"}</span>
                       )}
                     </td>
-                    <td className="py-1.5 pr-3 text-mut">{p.outcome ?? "-"}</td>
-                    <td className="py-1.5 text-right font-mono tabular-nums text-mut">
+                    <td className="py-2 pr-3 text-mut">{p.outcome ?? "-"}</td>
+                    <td className="py-2 text-right font-mono tabular-nums text-mut">
                       {p.avg_price !== null ? p.avg_price.toFixed(3) : "-"}
                     </td>
-                    <td className="py-1.5 text-right font-mono tabular-nums">
+                    <td className="py-2 text-right font-mono tabular-nums">
                       <Pnl value={p.realized_pnl} />
                     </td>
-                    <td className="py-1.5 text-right font-mono text-mut">
+                    <td className="py-2 text-right font-mono text-mut">
                       {fmtTime(p.timestamp)}
                     </td>
                   </tr>
@@ -920,7 +930,7 @@ function WalletModal({
               </tbody>
             </table>
             {total > pageSize && (
-              <div className="mt-3 flex items-center justify-between font-mono text-[11px] text-mut">
+              <div className="mt-4 flex items-center justify-between font-mono text-[11px] text-mut">
                 <button
                   onClick={() => setOffset(Math.max(0, offset - pageSize))}
                   disabled={offset === 0}
