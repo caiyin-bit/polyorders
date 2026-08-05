@@ -15,7 +15,10 @@ export async function middleware(req: NextRequest) {
   return NextResponse.redirect(url);
 }
 
-// 除登录页、认证回调、Next 静态资源外全部需要登录
+// 除登录页、认证回调、Cron 触发端点、Next 静态资源外全部需要登录
+// (cron 路由自带 CRON_SECRET 校验)
 export const config = {
-  matcher: ["/((?!login|api/auth|_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    "/((?!login|api/auth|api/cron|_next/static|_next/image|favicon.ico).*)",
+  ],
 };
