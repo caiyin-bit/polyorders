@@ -8,8 +8,8 @@ export const metadata: Metadata = {
   description: "Polymarket high win-rate wallet screener",
 };
 
-// 默认深色;仅当用户显式选过浅色时不加 dark
-const themeInit = `try{if(localStorage.getItem("theme")!=="light")document.documentElement.classList.add("dark")}catch(e){document.documentElement.classList.add("dark")}`;
+// 默认浅色;仅当用户显式选过深色时加 dark
+const themeInit = `try{if(localStorage.getItem("theme")==="dark")document.documentElement.classList.add("dark")}catch(e){}`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
