@@ -4,6 +4,9 @@ import LoginButton from "./login-button";
 
 export const metadata: Metadata = { title: "登录 · polyorders" };
 
+// 请求时渲染:bot 配置来自运行时环境变量,构建期不可用(Docker 构建仅注入 DATABASE_URL)
+export const dynamic = "force-dynamic";
+
 export default function LoginPage() {
   let botId = "";
   try {
