@@ -1,5 +1,6 @@
 import { getPool, query } from "../db";
 import { fetchCandidates } from "./candidates";
+import { fetchLive } from "./live";
 import { fetchPositions } from "./positions";
 import { prefilter } from "./prefilter";
 import { computeScores } from "./score";
@@ -50,6 +51,7 @@ async function main() {
     "2": runStep("prefilter", () => prefilter(force, max)),
     "3": runStep("positions", () => fetchPositions(force, max)),
     "4": runStep("score", () => computeScores().then((r) => ({ ok: r.total }))),
+    "5": runStep("live", () => fetchLive()),
   };
 
   const selected = step ? [step] : Object.keys(steps);

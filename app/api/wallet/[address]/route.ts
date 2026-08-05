@@ -29,7 +29,7 @@ export async function GET(
   const where = q ? "address = $1 AND title ILIKE $2" : "address = $1";
   const args: unknown[] = q ? [address, `%${q}%`] : [address];
 
-  const [scoreRes, candRes, countRes, posRes] = await Promise.all([
+  const [scoreRes, candRes, countRes, posRes, openRes, openCountRes] = await Promise.all([
     query(
       `SELECT total_positions, winning_positions, win_rate,
               total_realized_pnl, avg_pnl, rank
@@ -50,6 +50,17 @@ export async function GET(
        ORDER BY "timestamp" DESC NULLS LAST
        LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
       args,
+    ),
+    query(
+      `SELECT condition_id, outcome, size, avg_price, cur_price, cash_pnl, title, event_slug
+       FROM open_positions WHERE address = $1
+       ORDER BY current_value DESC NULLS LAST
+       LIMIT 50`,
+      [address],
+    ),
+    query<{ n: number }>(
+      "SELECT COUNT(*)::int AS n FROM open_positions WHERE address = $1",
+      [address],
     ),
   ]);
 
@@ -93,6 +104,8 @@ export async function GET(
     totalRows: countRes.rows[0].n,
     pageSize: PAGE_SIZE,
     positions: rows,
+    openPositions: openRes.rows,
+    openTotal: openCountRes.rows[0].n,
     curve,
   });
 }

@@ -26,6 +26,18 @@ export type RunRow = {
   error: string | null;
 };
 
+export type FeedTrade = {
+  address: string;
+  username: string | null;
+  side: string;
+  price: number | null;
+  usdc_size: number | null;
+  outcome: string | null;
+  title: string | null;
+  event_slug: string | null;
+  timestamp: number;
+};
+
 export type Funnel = {
   candidates: number;
   prefilterPass: number;
@@ -400,7 +412,82 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
   );
 }
 
+/* ---------- Top N 最新动向 ---------- */
+
+function LiveFeedPanel({ feed, topN }: { feed: FeedTrade[]; topN: number }) {
+  return (
+    <section className="rounded-lg border border-line bg-panel p-4">
+      <h2 className="mb-3 text-xs font-medium tracking-wide text-ink2">
+        Top {topN} 最新动向
+        <span className="ml-2 font-normal text-mut">每 2 小时更新</span>
+      </h2>
+      {feed.length === 0 ? (
+        <p className="text-xs text-mut">
+          暂无成交数据,先运行抓取 step 5
+        </p>
+      ) : (
+        <ul className="divide-y divide-line/60">
+          {feed.map((t, i) => {
+            const buy = t.side === "BUY";
+            return (
+              <li key={i} className="py-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={`shrink-0 rounded px-1 py-px font-mono text-[10px] font-semibold ${
+                      buy
+                        ? "bg-up/15 text-up-ink"
+                        : "bg-down/15 text-down-ink"
+                    }`}
+                  >
+                    {buy ? "买" : "卖"}
+                  </span>
+                  {t.event_slug ? (
+                    <a
+                      href={`https://polymarket.com/event/${t.event_slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate text-ink2 hover:text-accent hover:underline"
+                    >
+                      {t.title ?? "-"}
+                    </a>
+                  ) : (
+                    <span className="truncate text-ink2">{t.title ?? "-"}</span>
+                  )}
+                </div>
+                <div className="mt-1 flex items-baseline gap-2 font-mono text-[11px] tabular-nums text-mut">
+                  <span className={buy ? "text-up-ink" : "text-down-ink"}>
+                    {fmtUsd(t.usdc_size)}
+                  </span>
+                  <span>@{t.price !== null ? t.price.toFixed(2) : "-"}</span>
+                  <span className="truncate">{t.outcome ?? ""}</span>
+                  <span className="ml-auto shrink-0 truncate">
+                    {t.username ?? shortAddr(t.address)}
+                  </span>
+                  <span className="shrink-0" suppressHydrationWarning>
+                    {fmtClock(t.timestamp * 1000)}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /* ---------- 钱包详情抽屉 ---------- */
+
+type OpenPositionRow = {
+  condition_id: string;
+  outcome: string | null;
+  size: number | null;
+  avg_price: number | null;
+  cur_price: number | null;
+  cash_pnl: number | null;
+  title: string | null;
+  event_slug: string | null;
+};
 
 type WalletDetail = {
   username: string | null;
@@ -414,6 +501,8 @@ type WalletDetail = {
   } | null;
   totalRows: number;
   pageSize: number;
+  openPositions: OpenPositionRow[];
+  openTotal: number;
   positions: Array<{
     condition_id: string;
     title: string | null;
@@ -666,6 +755,62 @@ function Drawer({
             ))}
           </div>
 
+          {detail && detail.openTotal > 0 && (
+            <div className="mt-5">
+              <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
+                当前持仓
+                <span className="ml-2 font-mono font-normal text-mut">
+                  {detail.openTotal.toLocaleString()} 个
+                  {detail.openTotal > detail.openPositions.length &&
+                    `,按市值显示前 ${detail.openPositions.length}`}
+                </span>
+              </h3>
+              <table className="w-full text-left text-xs">
+                <thead className="text-[11px] text-mut">
+                  <tr>
+                    <th className="py-1.5 font-normal">市场</th>
+                    <th className="py-1.5 font-normal">方向</th>
+                    <th className="py-1.5 text-right font-normal">数量</th>
+                    <th className="py-1.5 text-right font-normal">均价→现价</th>
+                    <th className="py-1.5 text-right font-normal">浮动盈亏</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/60">
+                  {detail.openPositions.map((p, i) => (
+                    <tr key={i}>
+                      <td className="max-w-52 truncate py-1.5 pr-3">
+                        {p.event_slug ? (
+                          <a
+                            href={`https://polymarket.com/event/${p.event_slug}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-ink2 hover:text-accent hover:underline"
+                          >
+                            {p.title ?? "-"}
+                          </a>
+                        ) : (
+                          <span className="text-ink2">{p.title ?? "-"}</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-3 text-mut">{p.outcome ?? "-"}</td>
+                      <td className="py-1.5 pr-4 text-right font-mono tabular-nums text-mut">
+                        {p.size !== null ? p.size.toFixed(0) : "-"}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-mut">
+                        {p.avg_price !== null ? p.avg_price.toFixed(2) : "-"}
+                        {" → "}
+                        {p.cur_price !== null ? p.cur_price.toFixed(2) : "-"}
+                      </td>
+                      <td className="py-1.5 text-right font-mono tabular-nums">
+                        <Pnl value={p.cash_pnl} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="mt-5">
             <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
               累计已实现盈亏
@@ -785,11 +930,13 @@ export default function Dashboard({
   rows,
   funnel,
   runs,
+  feed,
   config,
 }: {
   rows: LeaderRow[];
   funnel: Funnel;
   runs: RunRow[];
+  feed: FeedTrade[];
   config: Config;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("rank");
@@ -866,6 +1013,7 @@ export default function Dashboard({
       <div className="space-y-4">
         <FunnelPanel funnel={funnel} config={config} />
         <PipelinePanel runs={runs} />
+        <LiveFeedPanel feed={feed} topN={config.topN} />
       </div>
 
       <section

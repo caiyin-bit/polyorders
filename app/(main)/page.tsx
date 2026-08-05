@@ -6,13 +6,18 @@ import {
   SCORE_MIN_POSITIONS,
   TOP_N,
 } from "@/src/config";
-import Dashboard, { type Funnel, type LeaderRow, type RunRow } from "../dashboard";
+import Dashboard, {
+  type FeedTrade,
+  type Funnel,
+  type LeaderRow,
+  type RunRow,
+} from "../dashboard";
 
 // ISR:数据由每日定时抓取更新,5 分钟缓存足够新鲜;dev 模式不受影响仍实时
 export const revalidate = 300;
 
 export default async function HomePage() {
-  const [funnelRes, rowsRes, sparkRes, runsRes] = await Promise.all([
+  const [funnelRes, rowsRes, sparkRes, runsRes, feedRes] = await Promise.all([
     query<{
       candidates: number;
       prefilter_pass: number;
@@ -51,6 +56,13 @@ export default async function HomePage() {
       `SELECT step, started_at, finished_at, addresses_ok, addresses_failed, error
        FROM fetch_runs ORDER BY id DESC LIMIT 8`,
     ),
+    query<FeedTrade>(
+      `SELECT t.address, c.username, t.side, t.price, t.usdc_size, t.outcome,
+              t.title, t.event_slug, t."timestamp"
+       FROM trades t LEFT JOIN candidates c ON c.address = t.address
+       ORDER BY t."timestamp" DESC
+       LIMIT 30`,
+    ),
   ]);
 
   const f = funnelRes.rows[0];
@@ -78,6 +90,7 @@ export default async function HomePage() {
       rows={rows}
       funnel={funnel}
       runs={runsRes.rows}
+      feed={feedRes.rows}
       config={{
         topN: TOP_N,
         leaderboardPages: LEADERBOARD.maxOffset / LEADERBOARD.pageSize,
