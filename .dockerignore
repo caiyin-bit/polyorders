@@ -1,0 +1,10 @@
+node_modules
+.next
+.git
+.gstack
+data
+.env
+.env.local
+.pnpm-store
+supabase
+*.tsbuildinfo

@@ -1,0 +1,3 @@
+# UTC 时间。live 每 2 小时(错开整点);全量每日 02:00 UTC(北京 10:00)
+23 */2 * * * /app/scripts/run-fetch.sh 5 >> /var/log/fetch/live.log 2>&1
+0 2 * * * /app/scripts/run-fetch.sh all >> /var/log/fetch/full.log 2>&1
