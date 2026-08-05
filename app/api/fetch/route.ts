@@ -59,8 +59,12 @@ export async function POST() {
 }
 
 export async function GET() {
-  const [current, countsRes] = await Promise.all([
+  const [current, recentRes, countsRes] = await Promise.all([
     dbCurrentRun(),
+    query(
+      `SELECT step, started_at, finished_at, addresses_ok, addresses_failed, error
+       FROM fetch_runs ORDER BY id DESC LIMIT 8`,
+    ),
     query<{
       candidates: number;
       prefiltered: number;
@@ -83,6 +87,7 @@ export async function GET() {
     // Vercel serverless 无常驻进程,线上不支持手动触发(抓取由 GitHub Actions 定时执行)
     canRun: !process.env.VERCEL,
     current,
+    recent: recentRes.rows,
     counts: {
       candidates: c.candidates,
       prefiltered: c.prefiltered,

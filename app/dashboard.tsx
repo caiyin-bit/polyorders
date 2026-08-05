@@ -66,6 +66,7 @@ type FetchStatus = {
   running: boolean;
   canRun?: boolean;
   current: { step: string; started_at: number } | null;
+  recent?: RunRow[];
   counts: {
     candidates: number;
     prefiltered: number;
@@ -295,6 +296,8 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
   }
 
   const c = status?.counts;
+  // 运行记录优先用轮询到的实时数据,SSR 传入的 runs 仅作首屏兜底(页面有 ISR 缓存)
+  const displayRuns = status?.recent ?? runs;
   const currentStep = status?.current?.step ?? null;
   const STEP_ORDER = ["candidates", "prefilter", "positions", "score", "live"];
   const currentIdx = currentStep ? STEP_ORDER.indexOf(currentStep) : -1;
@@ -419,7 +422,7 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-line/60">
-          {runs.slice(0, 6).map((r, i) => (
+          {displayRuns.slice(0, 6).map((r, i) => (
             <tr key={i} title={r.error ?? undefined}>
               <td className="py-1">
                 <span className={r.error ? "text-down-ink" : "text-ink2"}>
@@ -441,7 +444,7 @@ function PipelinePanel({ runs }: { runs: RunRow[] }) {
               </td>
             </tr>
           ))}
-          {runs.length === 0 && (
+          {displayRuns.length === 0 && (
             <tr>
               <td colSpan={4} className="py-2 text-mut">
                 暂无记录,点击 RUN 或运行 pnpm fetch
