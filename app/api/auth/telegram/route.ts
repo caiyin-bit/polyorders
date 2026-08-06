@@ -22,9 +22,12 @@ export async function POST(req: Request) {
 
   const user = await verifyTelegramIdToken(idToken);
   if (!user) {
+    // 具体原因由 verifyTelegramIdToken 打日志;这里只标明走到了哪一步
+    console.warn("auth: id_token 验签未通过");
     return NextResponse.json({ error: "invalid" }, { status: 401 });
   }
   if (!isAllowed(user.id)) {
+    console.warn(`auth: 用户 ${user.id} 不在白名单内`);
     return NextResponse.json({ error: "denied" }, { status: 403 });
   }
 
