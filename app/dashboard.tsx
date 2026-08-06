@@ -624,24 +624,41 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+/** 持仓自动刷新间隔。看的是"我现在值多少钱",秒级精度没有意义 */
+const PORTFOLIO_POLL_MS = 30_000;
+
 function PortfolioPanel() {
   const [data, setData] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // silent:自动刷新不闪按钮状态,否则每 30 秒跳一次"刷新中"很吵
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch("/api/portfolio");
       setData((await res.json()) as Portfolio);
+      setUpdatedAt(Date.now());
     } catch {
       /* 面板不可用不影响主看板 */
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     load();
+    // 标签页在后台时不轮询——没人看,白打 Polymarket 的接口;
+    // 切回前台立刻补一次,免得盯着一屏过期数字等下一个周期
+    const tick = () => {
+      if (!document.hidden) load(true);
+    };
+    const timer = setInterval(tick, PORTFOLIO_POLL_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [load]);
 
   const positions = data?.positions ?? [];
@@ -660,13 +677,20 @@ function PortfolioPanel() {
             </span>
           )}
         </h2>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="text-[10px] text-mut hover:text-ink2 disabled:opacity-50"
-        >
-          {loading ? "刷新中…" : "刷新"}
-        </button>
+        <span className="flex items-center gap-2 text-[10px] text-mut">
+          {updatedAt && (
+            <span title={`每 ${PORTFOLIO_POLL_MS / 1000} 秒自动刷新`}>
+              {new Date(updatedAt).toLocaleTimeString("zh-CN", { hour12: false })}
+            </span>
+          )}
+          <button
+            onClick={() => load()}
+            disabled={loading}
+            className="hover:text-ink2 disabled:opacity-50"
+          >
+            {loading ? "刷新中…" : "刷新"}
+          </button>
+        </span>
       </div>
 
       {!data ? (
