@@ -4,7 +4,11 @@ import { getTradeClient } from "./client";
 // 轮询已提交订单的 CLOB 状态,回填 orders 表。
 // 只关心非终态的实盘单;dry-run 从未提交,无状态可查。
 
-type PendingOrder = { id: number; clob_order_id: string };
+type PendingOrder = {
+  id: number;
+  clob_order_id: string;
+  clob_status: string | null;
+};
 
 /** CLOB 终态:状态不再变化,停止轮询 */
 function isTerminal(status: string, sizeMatched: number, originalSize: number): boolean {
@@ -21,9 +25,13 @@ export async function pollOrderStatuses(): Promise<{
   settled: number;
 }> {
   const { rows } = await query<PendingOrder>(
-    `SELECT id, clob_order_id FROM orders
+    // clob_checked_at IS NULL 这条不能少:市价单(FAK)在提交时就返回 matched,
+    // 但成交份额要再查一次才知道。它保证这类单至少被查一次,又不会因为
+    // size_matched 始终为空而每轮重复查。
+    `SELECT id, clob_order_id, clob_status FROM orders
      WHERE NOT dry_run AND status = 'submitted' AND clob_order_id IS NOT NULL
-       AND (clob_status IS NULL
+       AND (clob_checked_at IS NULL
+            OR clob_status IS NULL
             OR upper(clob_status) NOT IN ('MATCHED', 'CANCELED', 'NOT_FOUND'))
      ORDER BY id`,
   );
@@ -51,7 +59,9 @@ export async function pollOrderStatuses(): Promise<{
         console.error(`poll: order ${row.id} 查询失败,跳过: ${msg}`);
         continue;
       }
-      status = "NOT_FOUND";
+      // 已成交的单会从 CLOB 的订单查询里消失,此时别把已知的 matched
+      // 覆盖成 NOT_FOUND——那等于把成交结果丢了
+      status = row.clob_status ?? "NOT_FOUND";
       settled++;
     }
     await query(
