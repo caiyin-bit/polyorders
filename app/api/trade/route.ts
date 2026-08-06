@@ -11,7 +11,7 @@ export async function GET() {
     query(
       `SELECT id, condition_id, market_slug, title, outcome, side, order_type,
               price, size, amount_usd, status, dry_run, clob_order_id,
-              clob_status, error, created_at
+              clob_status, size_matched, error, created_at
        FROM orders ORDER BY created_at DESC LIMIT 20`,
     ),
     Promise.resolve(tradeLimits()),

@@ -590,6 +590,139 @@ function PipelinePanel() {
   );
 }
 
+/* ---------- 我的持仓面板 ---------- */
+
+type PortfolioPosition = {
+  conditionId: string;
+  outcome?: string;
+  size?: number;
+  avgPrice?: number;
+  curPrice?: number;
+  currentValue?: number;
+  cashPnl?: number;
+  title?: string;
+};
+
+type Portfolio = {
+  configured: boolean;
+  address?: string;
+  balanceUsd?: number;
+  positionsValue?: number;
+  unrealizedPnl?: number;
+  realizedPnl?: number;
+  equity?: number;
+  positions?: PortfolioPosition[];
+  error?: string;
+};
+
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded border border-line bg-panel2 px-2 py-1.5">
+      <div className="text-[10px] text-mut">{label}</div>
+      <div className="font-mono tabular-nums text-[13px]">{value}</div>
+    </div>
+  );
+}
+
+function PortfolioPanel() {
+  const [data, setData] = useState<Portfolio | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/portfolio");
+      setData((await res.json()) as Portfolio);
+    } catch {
+      /* 面板不可用不影响主看板 */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const positions = data?.positions ?? [];
+
+  return (
+    <section className="rounded-lg border border-line bg-panel p-4">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-xs font-medium tracking-wide text-ink2">
+          我的持仓
+          {data?.address && (
+            <span
+              className="ml-2 font-mono text-[10px] text-mut"
+              title={`交易钱包 ${data.address}`}
+            >
+              {shortAddr(data.address)}
+            </span>
+          )}
+        </h2>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="text-[10px] text-mut hover:text-ink2 disabled:opacity-50"
+        >
+          {loading ? "刷新中…" : "刷新"}
+        </button>
+      </div>
+
+      {!data ? (
+        <p className="text-[11px] text-mut">读取中…</p>
+      ) : !data.configured ? (
+        <p className="text-[11px] leading-4 text-mut">
+          交易钱包不可用:检查 <code>POLYMARKET_PRIVATE_KEY</code> 与{" "}
+          <code>POLYMARKET_RELAYER_KEY</code>。
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-1.5">
+            <Stat label="总权益" value={fmtUsd(data.equity ?? 0)} />
+            <Stat label="可用现金" value={fmtUsd(data.balanceUsd ?? 0)} />
+            <Stat label="未实现盈亏" value={<Pnl value={data.unrealizedPnl ?? 0} />} />
+            <Stat label="已实现盈亏" value={<Pnl value={data.realizedPnl ?? 0} />} />
+          </div>
+
+          {data.error ? (
+            <p className="mt-2 text-[11px] text-down-ink">{data.error}</p>
+          ) : positions.length === 0 ? (
+            <p className="mt-3 text-[11px] leading-4 text-mut">
+              当前没有未平仓仓位。下单后会在这里显示实时现值与盈亏。
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-1.5 border-t border-line pt-3">
+              {positions.map((p) => (
+                <li key={`${p.conditionId}-${p.outcome}`} className="text-[11px] leading-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="rounded bg-panel2 px-1 py-px text-[10px] text-ink2">
+                      {p.outcome}
+                    </span>
+                    <span className="font-mono tabular-nums text-mut">
+                      {(p.size ?? 0).toFixed(2)} 份 @ {(p.avgPrice ?? 0).toFixed(3)}
+                      {p.curPrice != null && ` → ${p.curPrice.toFixed(3)}`}
+                    </span>
+                    <span className="ml-auto font-mono tabular-nums">
+                      {fmtUsd(p.currentValue ?? 0)}
+                    </span>
+                    <span className="w-14 shrink-0 text-right font-mono tabular-nums">
+                      <Pnl value={p.cashPnl ?? null} />
+                    </span>
+                  </div>
+                  <div className="truncate text-mut" title={p.title ?? p.conditionId}>
+                    {p.title ?? p.conditionId}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 /* ---------- 手动下单面板 ---------- */
 
 type TradeLimits = { enabled: boolean; maxUsd: number; dailyMaxUsd: number };
@@ -608,6 +741,7 @@ type OrderRow = {
   status: string;
   dry_run: boolean;
   clob_status: string | null;
+  size_matched: number | null;
   error: string | null;
   created_at: number;
 };
@@ -775,6 +909,11 @@ function TradePanel() {
                   </span>
                   <span className="text-ink2">{o.outcome?.toUpperCase()}</span>
                   <span className="ml-auto font-mono tabular-nums text-mut">
+                    {o.size_matched != null && (
+                      <span className="mr-1.5 text-ink2" title="已成交份额">
+                        成交 {o.size_matched.toFixed(2)}
+                      </span>
+                    )}
                     {o.amount_usd != null ? fmtUsd(o.amount_usd) : `${o.size ?? ""}`}
                   </span>
                 </div>
@@ -1833,6 +1972,7 @@ export default function Dashboard({
           watcher={watcher}
           onRemove={toggleWatch}
         />
+        <PortfolioPanel />
         <TradePanel />
         <AgentPanel />
         <PipelinePanel />
