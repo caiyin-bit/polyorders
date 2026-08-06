@@ -31,10 +31,13 @@ export function bjDayStart(now: number): number {
   return Math.floor((now + BJ_OFFSET_MS) / 86400_000) * 86400_000 - BJ_OFFSET_MS;
 }
 
-/** 当日已真实成交/挂出的美元金额;dry-run 不计入 */
+/**
+ * 当日已真实成交/挂出的美元金额;dry-run 不计入。
+ * 按含手续费的 spend_usd 累计;010 迁移之前的历史行没有该值,回退到名义金额。
+ */
 export async function spentToday(): Promise<number> {
   const { rows } = await query<{ total: number }>(
-    `SELECT COALESCE(SUM(amount_usd), 0)::float8 AS total
+    `SELECT COALESCE(SUM(COALESCE(spend_usd, amount_usd)), 0)::float8 AS total
      FROM orders
      WHERE NOT dry_run AND status NOT IN ('rejected', 'failed', 'blocked')
        AND created_at >= $1`,

@@ -1,4 +1,5 @@
 import { OrderSide, type Market } from "@polymarket/client";
+import { TRADE_FEE_BUFFER } from "../config";
 import { query } from "../db";
 import { sendAlert } from "../telegram";
 import { getTradeClient } from "./client";
@@ -77,6 +78,17 @@ export function exposureUsd(args: {
   return (size ?? 0) * refPrice;
 }
 
+/**
+ * 计入手续费的实际支出估计,风控与日累计按它计。
+ *
+ * 只有买单会因手续费多花钱(卖单的费从收入里扣,不占用支出额度),
+ * 所以只给买单加缓冲。这个值与 amount_usd 分开存:前者约束风险,
+ * 后者是用户下单时填的数,界面展示应当保持一致。
+ */
+export function spendUsd(exposure: number, side: "BUY" | "SELL"): number {
+  return side === "BUY" ? exposure * (1 + TRADE_FEE_BUFFER) : exposure;
+}
+
 type TradeClient = Awaited<ReturnType<typeof getTradeClient>>;
 
 /** 支持三种市场写法:conditionId / slug / 页面 URL */
@@ -95,6 +107,8 @@ async function resolveMarket(
 }
 
 type Recorded = Omit<OrderResult, "id"> & {
+  /** 含手续费的支出估计,供日累计限额统计;未走到风控前为 null */
+  spendUsd?: number | null;
   request: OrderRequest;
   market?: Market | null;
   response?: unknown;
@@ -138,8 +152,8 @@ async function record(r: Recorded): Promise<OrderResult> {
        (source_address, condition_id, token_id, market_slug, title, outcome,
         side, order_type, price, size, amount_usd, status, dry_run,
         clob_order_id, clob_status, error, request_json, response_json, created_at,
-        agent_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+        agent_id, spend_usd)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
      RETURNING id`,
     [
       r.request.sourceAddress ?? null,
@@ -162,6 +176,7 @@ async function record(r: Recorded): Promise<OrderResult> {
       r.response === undefined ? null : jsonSafe(r.response),
       Date.now(),
       r.request.agentId ?? null,
+      r.spendUsd ?? null,
     ],
   );
   // 旁路推送:不 await,告警慢或失败都不该拖住下单响应
@@ -268,7 +283,9 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
     });
   }
 
-  const blocked = await checkLimits(amountUsd);
+  // 风控与日累计按含费支出计,而不是名义金额
+  const spend = spendUsd(amountUsd, req.side);
+  const blocked = await checkLimits(spend);
   if (blocked) {
     return record({
       ...EMPTY,
@@ -278,6 +295,7 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
       price,
       size,
       amountUsd,
+      spendUsd: spend,
       status: "blocked",
       dryRun,
       error: blocked,
@@ -285,7 +303,16 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
   }
 
   const side = req.side === "BUY" ? OrderSide.BUY : OrderSide.SELL;
-  const common = { ...EMPTY, request: req, market, tokenId, price, size, amountUsd };
+  const common = {
+    ...EMPTY,
+    request: req,
+    market,
+    tokenId,
+    price,
+    size,
+    amountUsd,
+    spendUsd: spend,
+  };
 
   try {
     if (price !== null) {

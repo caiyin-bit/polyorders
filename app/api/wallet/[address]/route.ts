@@ -1,5 +1,6 @@
 import { query } from "@/src/db";
 import { getEventSlugs } from "@/src/markets";
+import { walletSnapshot } from "@/src/wallet";
 
 export const dynamic = "force-dynamic";
 
@@ -29,13 +30,9 @@ export async function GET(
   const where = q ? "address = $1 AND title ILIKE $2" : "address = $1";
   const args: unknown[] = q ? [address, `%${q}%`] : [address];
 
-  const [scoreRes, candRes, countRes, posRes, openRes, openCountRes, tradesRes] = await Promise.all([
-    query(
-      `SELECT total_positions, winning_positions, win_rate,
-              total_realized_pnl, avg_pnl, rank
-       FROM scores WHERE address = $1`,
-      [address],
-    ),
+  // 共享快照与本路由特有的查询并行发出,拆分不引入额外往返
+  const [snapshot, candRes, countRes, posRes] = await Promise.all([
+    walletSnapshot(address),
     query<{ username: string | null }>(
       "SELECT username FROM candidates WHERE address = $1",
       [address],
@@ -50,24 +47,6 @@ export async function GET(
        ORDER BY "timestamp" DESC NULLS LAST
        LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
       args,
-    ),
-    query(
-      `SELECT condition_id, outcome, size, avg_price, cur_price, cash_pnl, title, event_slug
-       FROM open_positions WHERE address = $1
-       ORDER BY current_value DESC NULLS LAST
-       LIMIT 50`,
-      [address],
-    ),
-    query<{ n: number }>(
-      "SELECT COUNT(*)::int AS n FROM open_positions WHERE address = $1",
-      [address],
-    ),
-    query(
-      `SELECT side, price, usdc_size, outcome, title, event_slug, "timestamp"
-       FROM trades WHERE address = $1
-       ORDER BY "timestamp" DESC
-       LIMIT 50`,
-      [address],
     ),
   ]);
 
@@ -107,13 +86,13 @@ export async function GET(
 
   return Response.json({
     username: candRes.rows[0]?.username ?? null,
-    score: scoreRes.rows[0] ?? null,
+    score: snapshot.score,
     totalRows: countRes.rows[0].n,
     pageSize: PAGE_SIZE,
     positions: rows,
-    openPositions: openRes.rows,
-    openTotal: openCountRes.rows[0].n,
-    trades: tradesRes.rows,
+    openPositions: snapshot.openPositions,
+    openTotal: snapshot.openTotal,
+    trades: snapshot.recentTrades,
     curve,
   });
 }

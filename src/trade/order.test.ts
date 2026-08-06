@@ -6,6 +6,7 @@ import {
   floorShares,
   formatOrderAlert,
   roundTo,
+  spendUsd,
 } from "./order";
 
 describe("decimalsForTick:价格精度", () => {
@@ -174,5 +175,27 @@ describe("formatOrderAlert:告警策略", () => {
   it("无市场信息时退回原始市场引用", () => {
     const text = formatOrderAlert({ ...base, status: "failed", dryRun: false }, 9);
     assert.match(text ?? "", /some-slug/);
+  });
+});
+
+describe("spendUsd:含手续费的支出", () => {
+  it("买单在名义金额上加手续费缓冲", () => {
+    // 实测 $2 名义单交易所计 $2.0628;缓冲取 4%,必须覆盖实测值
+    const spend = spendUsd(2, "BUY");
+    assert.ok(spend >= 2.0628, `缓冲不足以覆盖实测手续费: ${spend}`);
+    assert.ok(spend < 2.2, `缓冲过大,额度被浪费: ${spend}`);
+  });
+
+  it("卖单不加缓冲——手续费从收入里扣,不占用支出额度", () => {
+    assert.equal(spendUsd(10, "SELL"), 10);
+  });
+
+  it("0 敞口仍是 0", () => {
+    assert.equal(spendUsd(0, "BUY"), 0);
+  });
+
+  it("缓冲后的支出用于风控,可能让贴着上限的单被拒", () => {
+    // 名义 $4.9 在 $5 上限内,含费后超出——这正是这次修正要达到的效果
+    assert.ok(spendUsd(4.9, "BUY") > 5);
   });
 });

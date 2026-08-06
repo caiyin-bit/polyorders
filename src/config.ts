@@ -33,6 +33,11 @@ export const WATCH_RELOAD_MS = 30_000;
 export const TRADE_MAX_USD_DEFAULT = 5;
 export const TRADE_DAILY_MAX_USD_DEFAULT = 20;
 
+// 买单手续费按成交额比例加在支出之上(卖单则从收入里扣,不占用支出额度)。
+// 实测:名义 $2 的市价买单,交易所计的含费金额为 $2.0628,约 3.1%。
+// 取 4% 作为缓冲——限额约束的应当是实际支出,宁可略严也不要超支。
+export const TRADE_FEE_BUFFER = 0.04;
+
 // Agent 接入:注册端点必须匿名可调(agent 没有凭据),因此靠「未认领配额 +
 // 过期清理」限制滥用。选配额而非 IP 限速,是因为它不依赖内存状态,
 // 重启与多容器都成立。
