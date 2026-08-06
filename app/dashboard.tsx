@@ -872,7 +872,7 @@ function PortfolioModal({
                   <th className="py-2 text-right font-normal">现值</th>
                   <th className="py-2 text-right font-normal">盈亏</th>
                   <th className="py-2 text-right font-normal">盈亏%</th>
-                  <th className="py-2 font-normal">到期</th>
+                  <th className="py-2 pl-4 font-normal">到期</th>
                 </tr>
               </thead>
               <tbody>
@@ -944,7 +944,9 @@ function PortfolioModal({
                         {fmtPnlPct(p.percentPnl)}
                       </span>
                     </td>
-                    <td className="py-2 text-mut">{p.endDate ?? "-"}</td>
+                    <td className="whitespace-nowrap py-2 pl-4 text-mut">
+                      {p.endDate ?? "-"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -969,7 +971,7 @@ function PortfolioModal({
                   <th className="py-2 font-normal">市场</th>
                   <th className="py-2 text-right font-normal">金额</th>
                   <th className="py-2 text-right font-normal">成交份额</th>
-                  <th className="py-2 font-normal">CLOB</th>
+                  <th className="py-2 pl-4 font-normal">CLOB</th>
                 </tr>
               </thead>
               <tbody>
@@ -1022,7 +1024,7 @@ function PortfolioModal({
                       <td className="py-2 text-right font-mono tabular-nums">
                         {o.size_matched != null ? o.size_matched.toFixed(2) : "-"}
                       </td>
-                      <td className="py-2 text-[11px] text-mut">
+                      <td className="whitespace-nowrap py-2 pl-4 text-[11px] text-mut">
                         {o.clob_status ?? "-"}
                       </td>
                     </tr>
