@@ -4,6 +4,12 @@ set -e
 cd "$(dirname "$0")/.."
 git pull --ff-only
 docker compose -f docker-compose.vps.yml build
+
+# 在新镜像里跑测试。位置刻意排在迁移与重启之前:测试挂掉时数据库没被动过,
+# 线上容器也还在跑旧版本,失败的部署等于什么都没发生(set -e 会中止)。
+# 紧急情况需要绕过时,直接手工执行下面几条 docker compose 命令即可。
+docker compose -f docker-compose.vps.yml run --rm web pnpm test
+
 docker compose -f docker-compose.vps.yml run --rm web pnpm db:migrate
 docker compose -f docker-compose.vps.yml up -d
 docker image prune -f
