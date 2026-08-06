@@ -1027,12 +1027,16 @@ function AgentPanel() {
                 key={a.id}
                 className="rounded border border-line bg-panel2 p-2 text-[11px]"
               >
-                <div className="flex items-center gap-1.5">
-                  <span className={`font-medium ${revoked ? "text-mut line-through" : ""}`}>
+                <div className="space-y-0.5">
+                  <span
+                    className={`block whitespace-nowrap font-medium ${
+                      revoked ? "text-mut line-through" : ""
+                    }`}
+                  >
                     {a.name}
                   </span>
-                  {a.model && <span className="truncate text-mut">{a.model}</span>}
-                  <span className="ml-auto font-mono text-mut">{a.key_prefix}…</span>
+                  {a.model && <span className="block text-mut">{a.model}</span>}
+                  <span className="block font-mono text-mut">{a.key_prefix}…</span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-2 text-mut">
                   <span>
