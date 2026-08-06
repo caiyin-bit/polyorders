@@ -1,6 +1,6 @@
 "use client";
 
-import { fmtTime } from "@/app/lib/format";
+import { fmtAgo } from "@/app/lib/format";
 import { useCallback, useEffect, useState } from "react";
 
 /* ---------- Agent 接入面板 ---------- */
@@ -16,6 +16,35 @@ type AgentRow = {
   revoked_at: number | null;
   created_at: number;
 };
+
+/** 权限胶囊:点击即切换。选中态用主色描边,未选中是低对比的中性态 */
+function ScopeChip({
+  on,
+  onClick,
+  title,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-pressed={on}
+      className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] transition-colors ${
+        on
+          ? "bg-accent/15 text-accent ring-1 ring-accent/40"
+          : "bg-panel text-mut ring-1 ring-line hover:text-ink2"
+      }`}
+    >
+      {on ? "✓ " : ""}
+      {children}
+    </button>
+  );
+}
 
 function AgentOnboardModal({ onClose }: { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -146,45 +175,71 @@ export function AgentPanel() {
             return (
               <li
                 key={a.id}
-                className="rounded border border-line bg-panel2 p-2 text-[11px]"
+                className={`rounded border border-line bg-panel2 p-2.5 text-[11px] ${
+                  revoked ? "opacity-60" : ""
+                }`}
               >
-                <div className="space-y-0.5">
+                {/* 第一行:名字与模型。min-w-0 + truncate 才能让长名字省略而不是撑破卡片 */}
+                <div className="flex items-baseline gap-1.5">
                   <span
-                    className={`block whitespace-nowrap font-medium ${
+                    className={`min-w-0 truncate font-medium ${
                       revoked ? "text-mut line-through" : ""
                     }`}
+                    title={a.name}
                   >
                     {a.name}
                   </span>
-                  {a.model && <span className="block text-mut">{a.model}</span>}
-                  <span className="block font-mono text-mut">{a.key_prefix}…</span>
+                  {a.model && (
+                    <span
+                      className="min-w-0 shrink truncate text-[10px] text-mut"
+                      title={a.model}
+                    >
+                      {a.model}
+                    </span>
+                  )}
+                  {revoked && (
+                    <span className="ml-auto shrink-0 rounded bg-panel px-1 text-[10px] text-down-ink">
+                      已撤销
+                    </span>
+                  )}
                 </div>
-                <div className="mt-1.5 flex items-center gap-2 text-mut">
-                  <span>
-                    活跃 {a.last_seen_at ? fmtTime(a.last_seen_at) : "从未"}
+
+                {/* 第二行:key 前缀与活跃时间 */}
+                <div className="mt-1 flex items-baseline gap-2 text-[10px] text-mut">
+                  <span className="min-w-0 truncate font-mono">
+                    {a.key_prefix}…
                   </span>
-                  <label
-                    className="ml-auto flex items-center gap-1"
-                    title="允许改动实时关注池;它决定跟单引擎盯哪些地址"
+                  <span
+                    className="ml-auto shrink-0"
+                    title={
+                      a.last_seen_at
+                        ? new Date(a.last_seen_at).toLocaleString("zh-CN")
+                        : undefined
+                    }
                   >
-                    <input
-                      type="checkbox"
-                      checked={a.scopes.includes("watch")}
-                      onChange={() => toggleScope("watch")}
-                    />
+                    {a.last_seen_at ? `活跃 ${fmtAgo(a.last_seen_at)}` : "从未调用"}
+                  </span>
+                </div>
+
+                {/* 第三行:权限。胶囊比复选框省横向空间,标签不会被挤到折行 */}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <ScopeChip
+                    on={a.scopes.includes("watch")}
+                    onClick={() => toggleScope("watch")}
+                    title="允许增删实时关注池。它决定跟单引擎盯哪些地址——实盘模式下等于间接影响下单"
+                  >
                     关注池
-                  </label>
-                  <label className="flex items-center gap-1">
-                    <input
-                      type="checkbox"
-                      checked={a.scopes.includes("trade")}
-                      onChange={() => toggleScope("trade")}
-                    />
-                    下单权限
-                  </label>
+                  </ScopeChip>
+                  <ScopeChip
+                    on={a.scopes.includes("trade")}
+                    onClick={() => toggleScope("trade")}
+                    title="允许代表你下单。仍受 dry-run 开关与单笔/日累计限额约束"
+                  >
+                    下单
+                  </ScopeChip>
                   <button
                     onClick={() => patch(a.id, { revoked: !revoked })}
-                    className="text-down-ink hover:underline"
+                    className="ml-auto shrink-0 text-[10px] text-mut hover:text-down-ink hover:underline"
                   >
                     {revoked ? "恢复" : "撤销"}
                   </button>

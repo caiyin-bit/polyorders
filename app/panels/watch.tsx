@@ -1,6 +1,6 @@
 "use client";
 
-import { shortAddr } from "@/app/lib/format";
+import { fmtAgo, shortAddr } from "@/app/lib/format";
 
 /* ---------- 实时关注池 ---------- */
 
@@ -20,15 +20,6 @@ export type WatcherState = {
 };
 
 /** 秒级粒度的相对时间:实时通道下「刚刚 / 12 秒前」比「0 分钟前」有意义得多 */
-function fmtAgo(ms: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 5) return "刚刚";
-  if (s < 60) return `${s} 秒前`;
-  if (s < 3600) return `${Math.round(s / 60)} 分钟前`;
-  if (s < 86400) return `${Math.round(s / 3600)} 小时前`;
-  return `${Math.round(s / 86400)} 天前`;
-}
-
 export function WatchStar({
   watched,
   onToggle,

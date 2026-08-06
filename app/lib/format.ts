@@ -19,7 +19,21 @@ export function fmtUsd(x: number | null): string {
   return `${x < 0 ? "-" : ""}$${s.replace("-", "")}`;
 }
 
+// 时间格式化分两套,单位不同,用错会显示成公元五万年——务必按列的单位选:
+// 库内约定 *_at 列为毫秒(Date.now()),trades/closed_positions.timestamp 为秒。
+
+/** 入参为**秒**(API 原始值);输出 YYYY-MM-DD */
 export function fmtTime(epochSec: number | null): string {
   if (!epochSec) return "-";
   return new Date(epochSec * 1000).toISOString().slice(0, 10);
+}
+
+/** 入参为**毫秒**(Date.now());输出「3 分钟前」这类相对时间 */
+export function fmtAgo(epochMs: number): string {
+  const s = Math.max(0, Math.round((Date.now() - epochMs) / 1000));
+  if (s < 5) return "刚刚";
+  if (s < 60) return `${s} 秒前`;
+  if (s < 3600) return `${Math.round(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.round(s / 3600)} 小时前`;
+  return `${Math.round(s / 86400)} 天前`;
 }
