@@ -10,6 +10,7 @@
     "start": "next start",
     "fetch": "tsx src/fetch/index.ts",
     "db:migrate": "tsx scripts/migrate.ts",
+    "watch:rtds": "tsx --env-file-if-exists=.env scripts/watch-rtds.ts",
     "orders:poll": "tsx --env-file-if-exists=.env scripts/orders-poll.ts",
     "wallet:doctor": "tsx --env-file-if-exists=.env scripts/wallet-doctor.ts",
     "wallet:setup": "tsx --env-file-if-exists=.env scripts/wallet-setup.ts",

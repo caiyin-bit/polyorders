@@ -22,6 +22,12 @@ export const TRADES_KEEP_PER_ADDRESS = 50;
 // 实时关注池:小池子才支撑得起 5 分钟级高频定向拉取
 export const WATCH_POOL_LIMIT = 5;
 
+// RTDS 实时 watcher。全平台成交流约 28 条/秒,只有命中关注池的才落库。
+// 大额成交推 Telegram;冷却按地址生效,避免连续成交刷屏。
+export const WATCH_ALERT_MIN_USD = Number(process.env.WATCH_ALERT_MIN_USD) || 500;
+export const WATCH_ALERT_COOLDOWN_MS = 60_000;
+export const WATCH_RELOAD_MS = 30_000;
+
 // 交易风控默认值(美元),可由 TRADE_MAX_USD / TRADE_DAILY_MAX_USD 覆盖。
 // 默认取保守值:即使环境变量漏配,也不会放出大额单。
 export const TRADE_MAX_USD_DEFAULT = 5;

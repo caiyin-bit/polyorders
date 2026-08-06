@@ -14,7 +14,31 @@ export async function GET() {
      LEFT JOIN scores s ON s.address = w.address
      ORDER BY w.added_at`,
   );
-  return Response.json({ watchlist: rows, limit: WATCH_POOL_LIMIT });
+  const { rows: state } = await query<{
+    connected: boolean;
+    last_heartbeat_at: number | null;
+    last_event_at: number | null;
+    matched_seen: number;
+  }>(
+    "SELECT connected, last_heartbeat_at, last_event_at, matched_seen FROM watcher_state WHERE id = 1",
+  );
+
+  // 心跳每 30 秒写一次;超过 90 秒没动静就认为实时通道已断,降级到 5 分钟轮询
+  const s = state[0];
+  const live =
+    !!s?.connected &&
+    s.last_heartbeat_at !== null &&
+    Date.now() - s.last_heartbeat_at < 90_000;
+
+  return Response.json({
+    watchlist: rows,
+    limit: WATCH_POOL_LIMIT,
+    watcher: {
+      live,
+      lastEventAt: s?.last_event_at ?? null,
+      matchedSeen: s?.matched_seen ?? 0,
+    },
+  });
 }
 
 export async function POST(req: Request) {

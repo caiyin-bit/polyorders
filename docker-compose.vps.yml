@@ -44,6 +44,21 @@ services:
     volumes:
       - fetch_logs:/var/log/fetch
 
+  # RTDS 实时 watcher:常驻 WebSocket,关注池地址的秒级成交感知。
+  # 与 scheduler 共用 app 镜像;5 分钟轮询仍是正确性兜底,此服务挂掉不影响数据完整性。
+  watcher:
+    build:
+      context: .
+      target: app
+      args:
+        DATABASE_URL: ${DATABASE_URL}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: Asia/Shanghai
+      NODE_OPTIONS: --dns-result-order=ipv4first
+    command: ["pnpm", "watch:rtds"]
+
 volumes:
   caddy_data:
   caddy_config:

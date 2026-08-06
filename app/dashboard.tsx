@@ -801,6 +801,22 @@ type WatchRow = {
   last_trade_ts: number | null;
 };
 
+type WatcherState = {
+  live: boolean;
+  lastEventAt: number | null;
+  matchedSeen: number;
+};
+
+/** 秒级粒度的相对时间:实时通道下「刚刚 / 12 秒前」比「0 分钟前」有意义得多 */
+function fmtAgo(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 5) return "刚刚";
+  if (s < 60) return `${s} 秒前`;
+  if (s < 3600) return `${Math.round(s / 60)} 分钟前`;
+  if (s < 86400) return `${Math.round(s / 3600)} 小时前`;
+  return `${Math.round(s / 86400)} 天前`;
+}
+
 function WatchStar({
   watched,
   onToggle,
@@ -830,13 +846,16 @@ function WatchPanel({
   watch,
   limit,
   error,
+  watcher,
   onRemove,
 }: {
   watch: WatchRow[];
   limit: number;
   error: string | null;
+  watcher: WatcherState | null;
   onRemove: (address: string) => void;
 }) {
+  const live = watcher?.live ?? false;
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
       <div className="mb-3 flex items-baseline justify-between">
@@ -846,7 +865,21 @@ function WatchPanel({
             {watch.length}/{limit}
           </span>
         </h2>
-        <span className="text-[10px] text-mut">每 5 分钟更新</span>
+        <span
+          className="flex items-center gap-1 text-[10px] text-mut"
+          title={
+            live
+              ? "WebSocket 已连接,成交秒级到达;5 分钟轮询仍在兜底"
+              : "实时通道未连接,已降级为每 5 分钟轮询"
+          }
+        >
+          <span
+            className={`inline-block h-1.5 w-1.5 rounded-full ${
+              live ? "bg-up" : "bg-mut/50"
+            }`}
+          />
+          {live ? "实时" : "每 5 分钟"}
+        </span>
       </div>
 
       {watch.length === 0 ? (
@@ -867,10 +900,19 @@ function WatchPanel({
                 </span>
               )}
               {w.username && <span className="truncate text-mut">{w.username}</span>}
-              <span className="ml-auto shrink-0 text-mut">
-                {w.fetched_at
-                  ? `${Math.max(0, Math.round((Date.now() - w.fetched_at) / 60000))} 分钟前`
-                  : "待首轮"}
+              <span
+                className="ml-auto shrink-0 text-mut"
+                title={
+                  w.last_trade_ts
+                    ? `最新成交 ${new Date(w.last_trade_ts * 1000).toLocaleString("zh-CN")}`
+                    : "尚无成交记录"
+                }
+              >
+                {w.last_trade_ts
+                  ? `成交 ${fmtAgo(w.last_trade_ts * 1000)}`
+                  : w.fetched_at
+                    ? `拉取 ${fmtAgo(w.fetched_at)}`
+                    : "待首轮"}
               </span>
               <button
                 onClick={() => onRemove(w.address)}
@@ -1648,24 +1690,30 @@ export default function Dashboard({
   const [watch, setWatch] = useState<WatchRow[]>([]);
   const [watchLimit, setWatchLimit] = useState(5);
   const [watchError, setWatchError] = useState<string | null>(null);
+  const [watcher, setWatcher] = useState<WatcherState | null>(null);
 
   const loadWatch = useCallback(async () => {
     try {
       const res = await fetch("/api/watchlist");
-      const data = (await res.json()) as { watchlist: WatchRow[]; limit: number };
+      const data = (await res.json()) as {
+        watchlist: WatchRow[];
+        limit: number;
+        watcher: WatcherState;
+      };
       setWatch(data.watchlist);
       setWatchLimit(data.limit);
+      setWatcher(data.watcher);
     } catch {
       /* 关注池不可用不影响主看板 */
     }
   }, []);
 
-  // 30 秒轮询,让「x 分钟前」的新鲜度跟上 watch 抓取节奏
+  // 实时通道下成交秒级到达,10 秒轮询才跟得上;池子为空时没必要频繁打接口
   useEffect(() => {
     loadWatch();
-    const t = setInterval(loadWatch, 30_000);
+    const t = setInterval(loadWatch, watch.length > 0 ? 10_000 : 30_000);
     return () => clearInterval(t);
-  }, [loadWatch]);
+  }, [loadWatch, watch.length]);
 
   const watchedSet = useMemo(
     () => new Set(watch.map((w) => w.address.toLowerCase())),
@@ -1782,6 +1830,7 @@ export default function Dashboard({
           watch={watch}
           limit={watchLimit}
           error={watchError}
+          watcher={watcher}
           onRemove={toggleWatch}
         />
         <TradePanel />
