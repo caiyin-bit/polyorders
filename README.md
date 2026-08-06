@@ -42,6 +42,7 @@ pnpm dev
 | `tsx src/fetch/index.ts --step=N [--force] [--max=N]` | 单步运行:1 候选 / 2 初筛 / 3 仓位 / 4 评分 |
 | `pnpm wallet:doctor` | 交易钱包体检:地址、pUSD 余额、授权、风控配置 |
 | `pnpm wallet:setup` | 一次性交易授权(幂等) |
+| `pnpm test` | 跑单元测试(Node 内置 test runner,无额外依赖) |
 | `pnpm typecheck` | TypeScript 检查 |
 
 ## 交易(Polymarket CLOB V2)

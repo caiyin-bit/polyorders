@@ -26,7 +26,8 @@ export function tradeLimits(): TradeLimits {
 // 与抓取面板一致按北京时间划分自然日,不依赖进程时区
 const BJ_OFFSET_MS = 8 * 3600_000;
 
-function bjDayStart(now: number): number {
+/** 导出供测试:跨日边界算错会让日累计限额在半夜失效 */
+export function bjDayStart(now: number): number {
   return Math.floor((now + BJ_OFFSET_MS) / 86400_000) * 86400_000 - BJ_OFFSET_MS;
 }
 
@@ -43,18 +44,33 @@ export async function spentToday(): Promise<number> {
 }
 
 /**
+ * 限额判定的纯逻辑。通过返回 null,否则返回中文拒绝原因。
+ * 与取数分离是为了能直接测——这里算错就是真金白银的损失。
+ */
+export function limitRejection(
+  amountUsd: number,
+  spent: number,
+  limits: TradeLimits,
+): string | null {
+  if (!(amountUsd > 0)) return "下单金额必须大于 0";
+  if (amountUsd > limits.maxUsd) {
+    return `超出单笔上限:$${amountUsd} > $${limits.maxUsd}`;
+  }
+  if (spent + amountUsd > limits.dailyMaxUsd) {
+    return `超出日累计上限:今日已用 $${spent.toFixed(2)},本单 $${amountUsd},上限 $${limits.dailyMaxUsd}`;
+  }
+  return null;
+}
+
+/**
  * 限额校验。通过返回 null,否则返回中文拒绝原因。
  * dry-run 同样校验,这样核对时能提前发现限额配置不合理。
  */
 export async function checkLimits(amountUsd: number): Promise<string | null> {
   const limits = tradeLimits();
-  if (!(amountUsd > 0)) return "下单金额必须大于 0";
-  if (amountUsd > limits.maxUsd) {
-    return `超出单笔上限:$${amountUsd} > $${limits.maxUsd}`;
+  // 金额非法或已超单笔上限的,不必再查库
+  if (!(amountUsd > 0) || amountUsd > limits.maxUsd) {
+    return limitRejection(amountUsd, 0, limits);
   }
-  const spent = await spentToday();
-  if (spent + amountUsd > limits.dailyMaxUsd) {
-    return `超出日累计上限:今日已用 $${spent.toFixed(2)},本单 $${amountUsd},上限 $${limits.dailyMaxUsd}`;
-  }
-  return null;
+  return limitRejection(amountUsd, await spentToday(), limits);
 }

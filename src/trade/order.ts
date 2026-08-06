@@ -40,18 +40,40 @@ function jsonSafe(value: unknown): unknown {
   );
 }
 
-function decimalsForTick(tick: number): number {
+// 以下四个纯函数导出供测试:价格精度、份额取整与敞口折算算错,
+// 轻则被交易所拒单,重则突破风控限额。
+
+export function decimalsForTick(tick: number): number {
   return Math.max(2, Math.round(-Math.log10(tick)));
 }
 
-function roundTo(value: number, decimals: number): number {
+export function roundTo(value: number, decimals: number): number {
   const f = 10 ** decimals;
   return Math.round(value * f) / f;
 }
 
 /** 份额一律向下取整到 2 位:宁可少买/少卖,也不要因超量被拒 */
-function floorShares(value: number): number {
+export function floorShares(value: number): number {
   return Math.floor(value * 100) / 100;
+}
+
+/**
+ * 风控口径的美元敞口。
+ *
+ * 限价单一律按 份额 × 限价——限价买单不传 amountUsd,按它取会得到 0 而被
+ * 当成无效单放行(此处曾出过 bug)。市价买单用美元名义,市价卖单用买一价折算。
+ */
+export function exposureUsd(args: {
+  side: "BUY" | "SELL";
+  price: number | null;
+  size: number | null;
+  amountUsd?: number;
+  refPrice: number;
+}): number {
+  const { side, price, size, amountUsd, refPrice } = args;
+  if (price !== null && size !== null) return size * price;
+  if (side === "BUY") return amountUsd ?? 0;
+  return (size ?? 0) * refPrice;
 }
 
 type TradeClient = Awaited<ReturnType<typeof getTradeClient>>;
@@ -182,18 +204,16 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
   const price = req.limitPrice ? roundTo(req.limitPrice, priceDecimals) : null;
   const size = req.shares ? floorShares(req.shares) : null;
 
-  // 美元敞口(供风控):限价单一律按 份额 × 限价——限价买单不传金额,
-  // 若按 amountUsd 取会得到 0 而被误判为无效单。市价买单用美元名义,
-  // 市价卖单用当前买一价折算。
   const refPrice = Number(
     market.prices.bestBid ?? market.outcomes[req.outcome].price ?? 0,
   );
-  const amountUsd =
-    price !== null && size !== null
-      ? size * price
-      : req.side === "BUY"
-        ? (req.amountUsd ?? 0)
-        : (size ?? 0) * refPrice;
+  const amountUsd = exposureUsd({
+    side: req.side,
+    price,
+    size,
+    amountUsd: req.amountUsd,
+    refPrice,
+  });
 
   const minSize = Number(market.trading.minimumOrderSize ?? 0);
   if (size !== null && minSize > 0 && size < minSize) {

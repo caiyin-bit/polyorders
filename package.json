@@ -14,6 +14,7 @@
     "orders:poll": "tsx --env-file-if-exists=.env scripts/orders-poll.ts",
     "wallet:doctor": "tsx --env-file-if-exists=.env scripts/wallet-doctor.ts",
     "wallet:setup": "tsx --env-file-if-exists=.env scripts/wallet-setup.ts",
+    "test": "node --import tsx --test src/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
