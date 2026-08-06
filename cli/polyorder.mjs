@@ -95,6 +95,7 @@ const HELP = `polyorder —— polyorders 命令行(${DEFAULT_ORIGIN})
   me                      查看身份、权限与当前风控限额(dry-run 与否、单笔/日上限)
   leaderboard             高胜率地址榜单与评分
   wallet <address>        某地址的评分、持仓与最近成交
+  portfolio               我方交易钱包:总权益、现金、持仓与盈亏
   orders [--mine]         下单记录(--mine 只看本 agent 下的单)
   trade --market <M> --outcome yes|no --side buy|sell
         [--amount <USD>] [--shares <N>] [--limit <价格>]
@@ -178,6 +179,10 @@ async function main() {
       print(await request("GET", `/api/agent/wallet/${address}`));
       return;
     }
+
+    case "portfolio":
+      print(await request("GET", "/api/agent/portfolio"));
+      return;
 
     case "orders": {
       const mine = rest.includes("--mine");
