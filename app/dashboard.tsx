@@ -1041,21 +1041,18 @@ function PortfolioModal({
 
 function PortfolioPanel() {
   const [data, setData] = useState<Portfolio | null>(null);
-  const [loading, setLoading] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
 
-  // silent:自动刷新不闪按钮状态,否则每 30 秒跳一次"刷新中"很吵
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+  // 价格由 WebSocket 推送,这里的轮询只兜底结构性数据:
+  // 新开的仓位、现金余额、已实现盈亏
+  const load = useCallback(async () => {
     try {
       const res = await fetch("/api/portfolio");
       setData((await res.json()) as Portfolio);
       setUpdatedAt(Date.now());
     } catch {
       /* 面板不可用不影响主看板 */
-    } finally {
-      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -1064,7 +1061,7 @@ function PortfolioPanel() {
     // 标签页在后台时不轮询——没人看,白打 Polymarket 的接口;
     // 切回前台立刻补一次,免得盯着一屏过期数字等下一个周期
     const tick = () => {
-      if (!document.hidden) load(true);
+      if (!document.hidden) load();
     };
     const timer = setInterval(tick, PORTFOLIO_POLL_MS);
     document.addEventListener("visibilitychange", tick);
@@ -1112,36 +1109,24 @@ function PortfolioPanel() {
             </span>
           )}
         </h2>
-        <span className="flex items-center gap-2 text-[10px] text-mut">
+        <span
+          className="flex items-center gap-1 text-[10px] text-mut"
+          title={
+            live
+              ? "盘口实时推送,价格与盈亏逐笔更新"
+              : `实时通道未连接,已降级为每 ${PORTFOLIO_POLL_MS / 1000} 秒轮询`
+          }
+        >
           <span
-            className="flex items-center gap-1"
-            title={
-              live
-                ? "盘口实时推送,价格与盈亏逐笔更新"
-                : `实时通道未连接,已降级为每 ${PORTFOLIO_POLL_MS / 1000} 秒轮询`
-            }
-          >
-            <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${
-                live ? "bg-up" : "bg-mut/50"
-              }`}
-            />
-            {live
-              ? "实时"
-              : updatedAt
-                ? new Date(updatedAt).toLocaleTimeString("zh-CN", { hour12: false })
-                : "连接中"}
-          </span>
-          <button
-            onClick={(e) => {
-              e.stopPropagation(); // 否则点刷新会连带展开详情弹窗
-              load();
-            }}
-            disabled={loading}
-            className="hover:text-ink2 disabled:opacity-50"
-          >
-            {loading ? "刷新中…" : "刷新"}
-          </button>
+            className={`inline-block h-1.5 w-1.5 rounded-full ${
+              live ? "bg-up" : "bg-mut/50"
+            }`}
+          />
+          {live
+            ? "实时"
+            : updatedAt
+              ? new Date(updatedAt).toLocaleTimeString("zh-CN", { hour12: false })
+              : "连接中"}
         </span>
       </div>
 
