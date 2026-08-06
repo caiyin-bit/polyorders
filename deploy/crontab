@@ -3,3 +3,5 @@
 0 10 * * * /app/scripts/run-fetch.sh all >> /var/log/fetch/full.log 2>&1
 # 关注池定向拉取:空池秒退,不写 fetch_runs、失败不告警
 */5 * * * * /app/scripts/run-fetch.sh watch >> /var/log/fetch/watch.log 2>&1
+# 我方订单状态轮询:无待确认订单时秒退,不请求 CLOB
+*/5 * * * * cd /app && flock -n /tmp/orders-poll.lock ./node_modules/.bin/tsx scripts/orders-poll.ts >> /var/log/fetch/orders.log 2>&1

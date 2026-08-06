@@ -10,8 +10,8 @@ export async function GET(req: Request) {
 
     const { rows } = await query(
       `SELECT id, condition_id, market_slug, title, outcome, side, order_type,
-              price, size, amount_usd, status, dry_run, clob_status, error,
-              agent_id, created_at
+              price, size, amount_usd, status, dry_run, clob_status, size_matched,
+              clob_checked_at, error, agent_id, created_at
        FROM orders
        ${mine ? "WHERE agent_id = $1" : ""}
        ORDER BY created_at DESC
