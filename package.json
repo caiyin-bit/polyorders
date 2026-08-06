@@ -10,8 +10,8 @@
     "start": "next start",
     "fetch": "tsx src/fetch/index.ts",
     "db:migrate": "tsx scripts/migrate.ts",
-    "wallet:doctor": "tsx scripts/wallet-doctor.ts",
-    "wallet:setup": "tsx scripts/wallet-setup.ts",
+    "wallet:doctor": "tsx --env-file-if-exists=.env scripts/wallet-doctor.ts",
+    "wallet:setup": "tsx --env-file-if-exists=.env scripts/wallet-setup.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
