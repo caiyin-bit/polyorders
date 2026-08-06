@@ -227,7 +227,8 @@ export default function Dashboard({
             </span>
           </h2>
           <span className="text-[11px] text-mut">
-            前 {config.topN} 名为最终入选(绿色标记)
+            {/* 不写死颜色名:配色可切换,文案会跟着说谎 */}
+            前 {config.topN} 名为最终入选(排名高亮)
           </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <input
@@ -302,7 +303,9 @@ export default function Dashboard({
                       <td className="py-1.5 pl-4 pr-2">
                         <span
                           className={`font-mono tabular-nums ${
-                            isTop ? "font-semibold text-up-ink" : "text-mut"
+                            // 入选标记用主色:它表达「被选中」而非「上涨」,
+                            // 跟着涨跌配色翻转毫无意义
+                            isTop ? "font-semibold text-accent" : "text-mut"
                           }`}
                         >
                           {r.rank}
@@ -331,7 +334,9 @@ export default function Dashboard({
                         </span>
                         <div className="mt-0.5 ml-auto h-[3px] w-14 rounded-sm bg-panel2">
                           <div
-                            className="h-full rounded-sm bg-up"
+                            // 胜率是量级不是方向,用主色;否则红涨配色下整张表
+                            // 会被染成一片红,看着像全是亏损
+                            className="h-full rounded-sm bg-accent"
                             style={{ width: `${r.win_rate * 100}%` }}
                           />
                         </div>

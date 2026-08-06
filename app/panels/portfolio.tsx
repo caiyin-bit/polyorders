@@ -166,7 +166,7 @@ function PortfolioModal({
               {t && (
                 <span
                   className={`rounded px-1.5 py-0.5 text-[10px] ${
-                    t.mode === "live" ? "bg-up/15 text-up-ink" : "bg-panel2 text-mut"
+                    t.mode === "live" ? "bg-ok/15 text-ok-ink" : "bg-panel2 text-mut"
                   }`}
                   title={
                     t.mode === "live"
@@ -185,7 +185,7 @@ function PortfolioModal({
               >
                 <span
                   className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    live ? "bg-up" : "bg-mut/50"
+                    live ? "bg-ok" : "bg-mut/50"
                   }`}
                 />
                 {live ? "实时" : "轮询"}
@@ -323,7 +323,7 @@ function PortfolioModal({
                         )}
                         {p.redeemable && (
                           <span
-                            className="shrink-0 rounded bg-up/15 px-1 text-[9px] text-up-ink"
+                            className="shrink-0 rounded bg-ok/15 px-1 text-[9px] text-ok-ink"
                             title="市场已结算,可赎回"
                           >
                             可赎回
@@ -426,7 +426,7 @@ function PortfolioModal({
                         </div>
                         {o.error && (
                           <div
-                            className="truncate text-[10px] text-down-ink"
+                            className="truncate text-[10px] text-bad-ink"
                             title={o.error}
                           >
                             {o.error}
@@ -534,7 +534,7 @@ export function PortfolioPanel() {
         >
           <span
             className={`inline-block h-1.5 w-1.5 rounded-full ${
-              live ? "bg-up" : "bg-mut/50"
+              live ? "bg-ok" : "bg-mut/50"
             }`}
           />
           {live
@@ -562,7 +562,7 @@ export function PortfolioPanel() {
           </div>
 
           {view.error ? (
-            <p className="mt-2 text-[11px] text-down-ink">{view.error}</p>
+            <p className="mt-2 text-[11px] text-bad-ink">{view.error}</p>
           ) : positions.length === 0 ? (
             <p className="mt-3 text-[11px] leading-4 text-mut">
               当前没有未平仓仓位。下单后会在这里显示实时现值与盈亏。

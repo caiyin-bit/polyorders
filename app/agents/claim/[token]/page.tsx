@@ -35,7 +35,7 @@ export default async function ClaimPage({
         <h1 className="text-sm font-medium tracking-wide text-ink2">认领 Agent</h1>
 
         {!agent ? (
-          <p className="mt-4 text-xs leading-5 text-down-ink">
+          <p className="mt-4 text-xs leading-5 text-bad-ink">
             这个认领链接无效、已被使用,或已超过 24 小时有效期。
             请让 agent 重新注册一次并把新链接交给你。
           </p>

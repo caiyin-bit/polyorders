@@ -28,10 +28,10 @@ export type OrderRow = {
 
 export const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
   dry_run: { label: "演练", cls: "bg-panel2 text-mut" },
-  submitted: { label: "已提交", cls: "bg-up/15 text-up-ink" },
-  rejected: { label: "被拒", cls: "bg-down/15 text-down-ink" },
-  blocked: { label: "风控拦截", cls: "bg-down/15 text-down-ink" },
-  failed: { label: "失败", cls: "bg-down/15 text-down-ink" },
+  submitted: { label: "已提交", cls: "bg-ok/15 text-ok-ink" },
+  rejected: { label: "被拒", cls: "bg-bad/15 text-bad-ink" },
+  blocked: { label: "风控拦截", cls: "bg-bad/15 text-bad-ink" },
+  failed: { label: "失败", cls: "bg-bad/15 text-bad-ink" },
 };
 
 /**
@@ -111,7 +111,7 @@ export function TradePanel() {
         {limits && (
           <span
             className={`rounded px-1.5 py-0.5 text-[10px] ${
-              limits.enabled ? "bg-down/15 text-down-ink" : "bg-panel2 text-mut"
+              limits.enabled ? "bg-bad/15 text-bad-ink" : "bg-panel2 text-mut"
             }`}
             title={
               limits.enabled
@@ -210,7 +210,7 @@ export function TradePanel() {
         </p>
       )}
 
-      {error && <p className="mt-2 text-[11px] text-down-ink">{error}</p>}
+      {error && <p className="mt-2 text-[11px] text-bad-ink">{error}</p>}
 
       {orders.length > 0 && (
         <ul className="mt-3 space-y-1.5 border-t border-line pt-3">

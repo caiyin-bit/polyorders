@@ -198,7 +198,7 @@ export function AgentPanel() {
                     </span>
                   )}
                   {revoked && (
-                    <span className="ml-auto shrink-0 rounded bg-panel px-1 text-[10px] text-down-ink">
+                    <span className="ml-auto shrink-0 rounded bg-panel px-1 text-[10px] text-bad-ink">
                       已撤销
                     </span>
                   )}
@@ -239,7 +239,7 @@ export function AgentPanel() {
                   </ScopeChip>
                   <button
                     onClick={() => patch(a.id, { revoked: !revoked })}
-                    className="ml-auto shrink-0 text-[10px] text-mut hover:text-down-ink hover:underline"
+                    className="ml-auto shrink-0 text-[10px] text-mut hover:text-bad-ink hover:underline"
                   >
                     {revoked ? "恢复" : "撤销"}
                   </button>

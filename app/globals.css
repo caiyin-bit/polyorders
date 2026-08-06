@@ -13,6 +13,10 @@
   --color-down: var(--t-down);
   --color-up-ink: var(--t-up-ink);
   --color-down-ink: var(--t-down-ink);
+  --color-ok: var(--t-ok);
+  --color-bad: var(--t-bad);
+  --color-ok-ink: var(--t-ok-ink);
+  --color-bad-ink: var(--t-bad-ink);
   --color-accent: var(--t-accent);
 }
 
@@ -30,11 +34,18 @@
   --c-red: #dc2626;
   --c-green-ink: #047857;
   --c-red-ink: #b91c1c;
-  /* 默认绿涨红跌(欧美习惯) */
+  /* 默认绿涨红跌(欧美习惯);仅这四个随 [data-updown] 翻转 */
   --t-up: var(--c-green);
   --t-down: var(--c-red);
   --t-up-ink: var(--c-green-ink);
   --t-down-ink: var(--c-red-ink);
+  /* 状态色恒定:成功/在线永远绿,失败/错误永远红。
+     它们表达的是「对不对」而非「涨还是跌」,跟着翻转会让报错变绿、
+     在线指示灯变红——那是在谎报系统状态。 */
+  --t-ok: var(--c-green);
+  --t-bad: var(--c-red);
+  --t-ok-ink: var(--c-green-ink);
+  --t-bad-ink: var(--c-red-ink);
   --t-accent: #2a78d6;
   --funnel-1: #86b6ef;
   --funnel-2: #5598e7;

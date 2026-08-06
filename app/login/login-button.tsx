@@ -63,7 +63,7 @@ export default function LoginButton({
         {busy ? "正在跳转 Telegram…" : "使用 Telegram 登录"}
       </button>
       {error && (
-        <p className="mt-5 rounded border border-down/40 bg-down/10 px-3 py-1.5 text-xs text-down-ink">
+        <p className="mt-5 rounded border border-bad/40 bg-bad/10 px-3 py-1.5 text-xs text-bad-ink">
           {error}
         </p>
       )}

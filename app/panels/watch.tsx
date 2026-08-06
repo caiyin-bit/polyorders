@@ -78,7 +78,7 @@ export function WatchPanel({
         >
           <span
             className={`inline-block h-1.5 w-1.5 rounded-full ${
-              live ? "bg-up" : "bg-mut/50"
+              live ? "bg-ok" : "bg-mut/50"
             }`}
           />
           {live ? "实时" : "每 5 分钟"}
@@ -119,7 +119,7 @@ export function WatchPanel({
               </span>
               <button
                 onClick={() => onRemove(w.address)}
-                className="shrink-0 text-down-ink hover:underline"
+                className="shrink-0 text-bad-ink hover:underline"
               >
                 移除
               </button>
@@ -128,7 +128,7 @@ export function WatchPanel({
         </ul>
       )}
 
-      {error && <p className="mt-2 text-[11px] text-down-ink">{error}</p>}
+      {error && <p className="mt-2 text-[11px] text-bad-ink">{error}</p>}
     </section>
   );
 }

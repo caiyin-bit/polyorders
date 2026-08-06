@@ -37,7 +37,7 @@ export default function ClaimButton({
   if (state === "done") {
     return (
       <div className="mt-5">
-        <p className="rounded border border-up/40 bg-up/10 px-3 py-2 text-xs text-up-ink">
+        <p className="rounded border border-ok/40 bg-ok/10 px-3 py-2 text-xs text-ok-ink">
           已认领 <span className="font-medium">{name}</span>。
           它现在可以用自己的 apiKey 读取数据了。
         </p>
@@ -60,7 +60,7 @@ export default function ClaimButton({
       >
         {state === "busy" ? "认领中…" : `确认认领 ${name}`}
       </button>
-      {error && <p className="mt-3 text-[11px] text-down-ink">{error}</p>}
+      {error && <p className="mt-3 text-[11px] text-bad-ink">{error}</p>}
     </div>
   );
 }

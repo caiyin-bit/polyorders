@@ -41,7 +41,7 @@ export default async function LoginPage({
           {botId ? (
             <LoginButton botId={botId} next={next} />
           ) : (
-            <p className="text-sm text-down-ink">服务端未配置登录参数</p>
+            <p className="text-sm text-bad-ink">服务端未配置登录参数</p>
           )}
           <p className="mt-6 text-xs text-mut">
             仅限白名单账号访问,无法登录请联系管理员

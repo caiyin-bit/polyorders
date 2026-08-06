@@ -172,7 +172,7 @@ export function PipelinePanel() {
           <span
             title={running ? "正在更新" : "空闲"}
             className={`inline-block h-1.5 w-1.5 rounded-full ${
-              running ? "animate-pulse bg-up" : "bg-mut"
+              running ? "animate-pulse bg-ok" : "bg-mut"
             }`}
           />
         </h2>
@@ -189,7 +189,7 @@ export function PipelinePanel() {
           {running ? "RUNNING" : "RUN"}
         </button>
       </div>
-      {error && <p className="mb-2 text-[11px] text-down-ink">{error}</p>}
+      {error && <p className="mb-2 text-[11px] text-bad-ink">{error}</p>}
       {canRun === false && !error && (
         <p className="mb-2 text-[11px] text-mut">
           线上由 GitHub Actions 定时抓取(每日全量 · 每 2 小时动向)
@@ -199,7 +199,7 @@ export function PipelinePanel() {
         <p className="flex items-center gap-1.5">
           <span
             className={`inline-block h-1.5 w-1.5 rounded-full ${
-              !status ? "bg-mut" : status.polymarket?.ok ? "bg-up" : "bg-down"
+              !status ? "bg-mut" : status.polymarket?.ok ? "bg-ok" : "bg-bad"
             }`}
           />
           {!status ? (
@@ -268,7 +268,7 @@ export function PipelinePanel() {
                           ? "bg-accent"
                           : s.upcoming
                             ? "bg-mut/40"
-                            : "bg-up"
+                            : "bg-ok"
                     }`}
                     style={{ width: `${s.pct ?? 100}%` }}
                   />
@@ -307,7 +307,7 @@ export function PipelinePanel() {
                     <span className="shrink-0 animate-pulse text-accent">…</span>
                   ) : (
                     <span
-                      className={`shrink-0 ${s.ok ? "text-up-ink" : "text-down-ink"}`}
+                      className={`shrink-0 ${s.ok ? "text-ok-ink" : "text-bad-ink"}`}
                     >
                       {s.ok ? "✓" : "✕"}
                     </span>
@@ -344,7 +344,7 @@ export function PipelinePanel() {
                         <tr key={i} title={r.error ?? undefined}>
                           <td className="py-1 pl-5">
                             <span
-                              className={r.error ? "text-down-ink" : "text-ink2"}
+                              className={r.error ? "text-bad-ink" : "text-ink2"}
                             >
                               {STEP_LABELS[r.step] ?? r.step}
                               {r.error && " ✕"}
