@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import ThemeToggle from "../theme-toggle";
+import UpDownToggle from "../updown-toggle";
 import UserMenu from "../user-menu";
 
 export default function MainLayout({ children }: { children: ReactNode }) {
@@ -14,6 +15,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         </span>
         <div className="ml-auto flex items-center gap-3">
           <UserMenu />
+          <UpDownToggle />
           <ThemeToggle />
         </div>
       </header>

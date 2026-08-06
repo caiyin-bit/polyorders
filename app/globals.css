@@ -25,10 +25,16 @@
   --t-ink: #1a1d21;
   --t-ink2: #4b5563;
   --t-mut: #8a919c;
-  --t-up: #059669;
-  --t-down: #dc2626;
-  --t-up-ink: #047857;
-  --t-down-ink: #b91c1c;
+  /* 调色板与涨跌语义分离:换配色只改这里,换红涨绿跌只改下面的映射 */
+  --c-green: #059669;
+  --c-red: #dc2626;
+  --c-green-ink: #047857;
+  --c-red-ink: #b91c1c;
+  /* 默认绿涨红跌(欧美习惯) */
+  --t-up: var(--c-green);
+  --t-down: var(--c-red);
+  --t-up-ink: var(--c-green-ink);
+  --t-down-ink: var(--c-red-ink);
   --t-accent: #2a78d6;
   --funnel-1: #86b6ef;
   --funnel-2: #5598e7;
@@ -46,14 +52,25 @@
   --t-ink: #e6e8eb;
   --t-ink2: #9aa2ad;
   --t-mut: #667085;
-  --t-up: #059669;
-  --t-down: #ef4444;
-  --t-up-ink: #34d399;
-  --t-down-ink: #f87171;
+  /* 深色下红绿都要提亮,映射关系由 :root 与 [data-updown] 决定,这里只换色值 */
+  --c-green: #059669;
+  --c-red: #ef4444;
+  --c-green-ink: #34d399;
+  --c-red-ink: #f87171;
   --t-accent: #3987e5;
   --funnel-1: #86b6ef;
   --funnel-2: #5598e7;
   --funnel-3: #3987e5;
   --funnel-4: #256abf;
   --funnel-5: #1c5cab;
+}
+
+/* 红涨绿跌(中港台习惯)。只交换语义映射,调色板本身不动,
+   因此深浅色下各自的提亮/加深都自动跟随。必须放在 :root 与 .dark 之后:
+   三者特异性相同,靠书写顺序决胜。 */
+[data-updown="red-up"] {
+  --t-up: var(--c-red);
+  --t-down: var(--c-green);
+  --t-up-ink: var(--c-red-ink);
+  --t-down-ink: var(--c-green-ink);
 }
