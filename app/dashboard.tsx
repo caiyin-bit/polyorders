@@ -598,20 +598,37 @@ type PortfolioPosition = {
   size?: number;
   avgPrice?: number;
   curPrice?: number;
+  initialValue?: number;
   currentValue?: number;
   cashPnl?: number;
+  percentPnl?: number;
+  realizedPnl?: number;
+  redeemable?: boolean;
+  negativeRisk?: boolean;
+  endDate?: string;
+  slug?: string;
+  eventSlug?: string;
   title?: string;
 };
 
 type Portfolio = {
   configured: boolean;
   address?: string;
+  signer?: string;
+  walletType?: string;
   balanceUsd?: number;
   positionsValue?: number;
   unrealizedPnl?: number;
   realizedPnl?: number;
   equity?: number;
   positions?: PortfolioPosition[];
+  trading?: {
+    mode: "live" | "dry-run";
+    maxUsdPerOrder: number;
+    maxUsdPerDay: number;
+    spentTodayUsd: number;
+    remainingTodayUsd: number;
+  };
   error?: string;
 };
 
@@ -627,10 +644,347 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 /** 持仓自动刷新间隔。看的是"我现在值多少钱",秒级精度没有意义 */
 const PORTFOLIO_POLL_MS = 30_000;
 
+function fmtPnlPct(x: number | null | undefined) {
+  if (x == null) return "-";
+  return `${x >= 0 ? "+" : ""}${x.toFixed(2)}%`;
+}
+
+/**
+ * 持仓详情弹窗。数据由面板传入,面板每 30 秒轮询一次,所以弹窗开着也会跟着更新。
+ * 订单自己拉,因为面板本身用不到。
+ */
+function PortfolioModal({
+  data,
+  onClose,
+}: {
+  data: Portfolio;
+  onClose: () => void;
+}) {
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/trade")
+      .then((r) => r.json())
+      .then((d: { orders: OrderRow[] }) => setOrders(d.orders ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const positions = data.positions ?? [];
+  const t = data.trading;
+  const cost = positions.reduce((s, p) => s + (p.initialValue ?? 0), 0);
+
+  const stats = [
+    { label: "总权益", value: fmtUsd(data.equity ?? 0) },
+    { label: "可用现金", value: fmtUsd(data.balanceUsd ?? 0) },
+    { label: "持仓市值", value: fmtUsd(data.positionsValue ?? 0) },
+    { label: "持仓成本", value: fmtUsd(cost) },
+    { label: "未实现盈亏", value: <Pnl value={data.unrealizedPnl ?? 0} /> },
+    { label: "已实现盈亏", value: <Pnl value={data.realizedPnl ?? 0} /> },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
+      <div className="relative flex max-h-[92vh] w-[94vw] max-w-[1400px] flex-col rounded-lg border border-line bg-panel shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between border-b border-line px-6 py-5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold">我的持仓</h2>
+              {data.walletType && (
+                <span className="rounded bg-panel2 px-1.5 py-0.5 text-[10px] text-mut">
+                  {data.walletType}
+                </span>
+              )}
+              {t && (
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] ${
+                    t.mode === "live" ? "bg-up/15 text-up-ink" : "bg-panel2 text-mut"
+                  }`}
+                  title={
+                    t.mode === "live"
+                      ? "TRADING_ENABLED=true,订单会真实提交"
+                      : "订单只签名不提交"
+                  }
+                >
+                  {t.mode === "live" ? "实盘" : "演练"}
+                </span>
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-mut">
+              <span className="select-all break-all">{data.address}</span>
+              <button
+                onClick={() => {
+                  if (!data.address) return;
+                  navigator.clipboard?.writeText(data.address).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1200);
+                  });
+                }}
+                className="shrink-0 rounded border border-line px-1.5 py-0.5 hover:border-mut hover:text-ink2"
+              >
+                {copied ? "✓" : "复制"}
+              </button>
+              <a
+                href={`https://polymarket.com/profile/${data.address}`}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 rounded border border-line px-1.5 py-0.5 hover:border-mut hover:text-ink2"
+              >
+                Polymarket ↗
+              </a>
+              {data.signer && (
+                <span title="签名者 EOA,与资金主体不是同一个地址">
+                  签名者 {shortAddr(data.signer)}
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="关闭"
+            className="ml-3 rounded border border-line px-2 py-1 text-sm text-ink2 hover:border-mut hover:text-ink"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
+            {stats.map((st) => (
+              <div
+                key={st.label}
+                className="rounded border border-line bg-panel2 px-3 py-2.5 text-center"
+              >
+                <div className="font-mono text-sm font-semibold tabular-nums">
+                  {st.value}
+                </div>
+                <div className="mt-0.5 text-[10px] text-mut">{st.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {t && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded border border-line bg-panel2 px-3 py-2 text-[11px] text-mut">
+              <span>
+                单笔上限{" "}
+                <span className="font-mono text-ink2">{fmtUsd(t.maxUsdPerOrder)}</span>
+              </span>
+              <span>
+                日累计{" "}
+                <span className="font-mono text-ink2">
+                  {fmtUsd(t.spentTodayUsd)} / {fmtUsd(t.maxUsdPerDay)}
+                </span>
+              </span>
+              <span>
+                今日可用{" "}
+                <span className="font-mono text-ink2">
+                  {fmtUsd(t.remainingTodayUsd)}
+                </span>
+              </span>
+              <span className="text-[10px]">按北京时间自然日计</span>
+            </div>
+          )}
+
+          <h3 className="mb-2 mt-5 text-xs font-medium tracking-wide text-ink2">
+            当前持仓
+            <span className="ml-2 font-mono font-normal text-mut">
+              {positions.length} 个
+            </span>
+          </h3>
+          {positions.length === 0 ? (
+            <p className="text-[11px] text-mut">当前没有未平仓仓位。</p>
+          ) : (
+            <table className="w-full text-left text-xs">
+              <thead className="text-[11px] text-mut">
+                <tr className="border-b border-line">
+                  <th className="py-2 font-normal">市场</th>
+                  <th className="py-2 font-normal">方向</th>
+                  <th className="py-2 text-right font-normal">份额</th>
+                  <th className="py-2 text-right font-normal">均价</th>
+                  <th className="py-2 text-right font-normal">现价</th>
+                  <th className="py-2 text-right font-normal">成本</th>
+                  <th className="py-2 text-right font-normal">现值</th>
+                  <th className="py-2 text-right font-normal">盈亏</th>
+                  <th className="py-2 text-right font-normal">盈亏%</th>
+                  <th className="py-2 font-normal">到期</th>
+                </tr>
+              </thead>
+              <tbody>
+                {positions.map((p) => (
+                  <tr
+                    key={`${p.conditionId}-${p.outcome}`}
+                    className="border-b border-line/50"
+                  >
+                    <td className="max-w-[380px] py-2">
+                      <div className="flex items-center gap-1.5">
+                        {p.slug ? (
+                          <a
+                            href={`https://polymarket.com/event/${p.eventSlug ?? p.slug}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="truncate hover:underline"
+                            title={p.title}
+                          >
+                            {p.title ?? p.conditionId}
+                          </a>
+                        ) : (
+                          <span className="truncate" title={p.title}>
+                            {p.title ?? p.conditionId}
+                          </span>
+                        )}
+                        {p.negativeRisk && (
+                          <span
+                            className="shrink-0 rounded bg-panel2 px-1 text-[9px] text-mut"
+                            title="neg-risk 市场(多候选人盘)"
+                          >
+                            NR
+                          </span>
+                        )}
+                        {p.redeemable && (
+                          <span
+                            className="shrink-0 rounded bg-up/15 px-1 text-[9px] text-up-ink"
+                            title="市场已结算,可赎回"
+                          >
+                            可赎回
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-2">{p.outcome}</td>
+                    <td className="py-2 text-right font-mono tabular-nums">
+                      {(p.size ?? 0).toFixed(2)}
+                    </td>
+                    <td className="py-2 text-right font-mono tabular-nums">
+                      {(p.avgPrice ?? 0).toFixed(4)}
+                    </td>
+                    <td className="py-2 text-right font-mono tabular-nums">
+                      {p.curPrice != null ? p.curPrice.toFixed(4) : "-"}
+                    </td>
+                    <td className="py-2 text-right font-mono tabular-nums text-mut">
+                      {fmtUsd(p.initialValue ?? 0)}
+                    </td>
+                    <td className="py-2 text-right font-mono tabular-nums">
+                      {fmtUsd(p.currentValue ?? 0)}
+                    </td>
+                    <td className="py-2 text-right font-mono tabular-nums">
+                      <Pnl value={p.cashPnl ?? null} />
+                    </td>
+                    <td className="py-2 text-right font-mono tabular-nums">
+                      <span
+                        className={
+                          (p.percentPnl ?? 0) >= 0 ? "text-up-ink" : "text-down-ink"
+                        }
+                      >
+                        {fmtPnlPct(p.percentPnl)}
+                      </span>
+                    </td>
+                    <td className="py-2 text-mut">{p.endDate ?? "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <h3 className="mb-2 mt-6 text-xs font-medium tracking-wide text-ink2">
+            下单记录
+            <span className="ml-2 font-mono font-normal text-mut">
+              最近 {orders.length} 笔
+            </span>
+          </h3>
+          {orders.length === 0 ? (
+            <p className="text-[11px] text-mut">还没有下过单。</p>
+          ) : (
+            <table className="w-full text-left text-xs">
+              <thead className="text-[11px] text-mut">
+                <tr className="border-b border-line">
+                  <th className="py-2 font-normal">时间</th>
+                  <th className="py-2 font-normal">状态</th>
+                  <th className="py-2 font-normal">方向</th>
+                  <th className="py-2 font-normal">市场</th>
+                  <th className="py-2 text-right font-normal">金额</th>
+                  <th className="py-2 text-right font-normal">成交份额</th>
+                  <th className="py-2 font-normal">CLOB</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((o) => {
+                  const s = ORDER_STATUS[o.status] ?? {
+                    label: o.status,
+                    cls: "bg-panel2 text-mut",
+                  };
+                  return (
+                    <tr key={o.id} className="border-b border-line/50">
+                      <td className="whitespace-nowrap py-2 font-mono text-[11px] text-mut">
+                        {new Date(o.created_at).toLocaleString("zh-CN", {
+                          hour12: false,
+                        })}
+                      </td>
+                      <td className="py-2">
+                        <span className={`rounded px-1 py-px text-[10px] ${s.cls}`}>
+                          {s.label}
+                        </span>
+                      </td>
+                      <td className="py-2">
+                        <span
+                          className={
+                            o.side === "BUY" ? "text-up-ink" : "text-down-ink"
+                          }
+                        >
+                          {o.side === "BUY" ? "买" : "卖"}
+                        </span>{" "}
+                        <span className="text-ink2">{o.outcome?.toUpperCase()}</span>
+                      </td>
+                      <td className="max-w-[320px] py-2">
+                        <div
+                          className="truncate"
+                          title={o.error ?? o.title ?? o.condition_id}
+                        >
+                          {o.title ?? o.market_slug ?? o.condition_id}
+                        </div>
+                        {o.error && (
+                          <div
+                            className="truncate text-[10px] text-down-ink"
+                            title={o.error}
+                          >
+                            {o.error}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 text-right font-mono tabular-nums">
+                        {o.amount_usd != null ? fmtUsd(o.amount_usd) : "-"}
+                      </td>
+                      <td className="py-2 text-right font-mono tabular-nums">
+                        {o.size_matched != null ? o.size_matched.toFixed(2) : "-"}
+                      </td>
+                      <td className="py-2 text-[11px] text-mut">
+                        {o.clob_status ?? "-"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PortfolioPanel() {
   const [data, setData] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [open, setOpen] = useState(false);
 
   // silent:自动刷新不闪按钮状态,否则每 30 秒跳一次"刷新中"很吵
   const load = useCallback(async (silent = false) => {
@@ -662,9 +1016,17 @@ function PortfolioPanel() {
   }, [load]);
 
   const positions = data?.positions ?? [];
+  const canOpen = data?.configured === true;
 
   return (
-    <section className="rounded-lg border border-line bg-panel p-4">
+    <>
+    <section
+      onClick={canOpen ? () => setOpen(true) : undefined}
+      className={`rounded-lg border border-line bg-panel p-4 ${
+        canOpen ? "cursor-pointer transition-colors hover:border-mut" : ""
+      }`}
+      title={canOpen ? "点击查看持仓详情" : undefined}
+    >
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-xs font-medium tracking-wide text-ink2">
           我的持仓
@@ -684,7 +1046,10 @@ function PortfolioPanel() {
             </span>
           )}
           <button
-            onClick={() => load()}
+            onClick={(e) => {
+              e.stopPropagation(); // 否则点刷新会连带展开详情弹窗
+              load();
+            }}
             disabled={loading}
             className="hover:text-ink2 disabled:opacity-50"
           >
@@ -744,6 +1109,10 @@ function PortfolioPanel() {
         </>
       )}
     </section>
+    {open && data?.configured && (
+      <PortfolioModal data={data} onClose={() => setOpen(false)} />
+    )}
+    </>
   );
 }
 
