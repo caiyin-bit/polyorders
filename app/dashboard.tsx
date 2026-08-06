@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { fmtPct, fmtTime, fmtUsd, shortAddr } from "./lib/format";
+import { useLivePrices, type LivePrice } from "./lib/live-prices";
 
 export type LeaderRow = {
   address: string;
@@ -594,6 +595,7 @@ function PipelinePanel() {
 
 type PortfolioPosition = {
   conditionId: string;
+  asset?: string;
   outcome?: string;
   size?: number;
   avgPrice?: number;
@@ -650,14 +652,56 @@ function fmtPnlPct(x: number | null | undefined) {
 }
 
 /**
+ * 用实时盘口中间价覆盖快照价格,并重算现值、盈亏与总权益。
+ *
+ * 分工:30 秒轮询的快照负责结构与正确性(有哪些仓位、现金、已实现盈亏),
+ * WebSocket 只改价格及其派生值。断线时自然退回快照值,不需要额外处理。
+ */
+function withLivePrices(
+  data: Portfolio,
+  prices: Record<string, LivePrice>,
+): Portfolio {
+  if (!data.positions?.length) return data;
+
+  let touched = false;
+  const positions = data.positions.map((p) => {
+    const live = p.asset ? prices[p.asset] : undefined;
+    if (!live) return p;
+    touched = true;
+    const currentValue = (p.size ?? 0) * live.mid;
+    const cost = p.initialValue ?? 0;
+    const cashPnl = currentValue - cost;
+    return {
+      ...p,
+      curPrice: live.mid,
+      currentValue,
+      cashPnl,
+      percentPnl: cost > 0 ? (cashPnl / cost) * 100 : p.percentPnl,
+    };
+  });
+  if (!touched) return data;
+
+  const positionsValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+  return {
+    ...data,
+    positions,
+    positionsValue,
+    unrealizedPnl: positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0),
+    equity: (data.balanceUsd ?? 0) + positionsValue,
+  };
+}
+
+/**
  * 持仓详情弹窗。数据由面板传入,面板每 30 秒轮询一次,所以弹窗开着也会跟着更新。
  * 订单自己拉,因为面板本身用不到。
  */
 function PortfolioModal({
   data,
+  live,
   onClose,
 }: {
   data: Portfolio;
+  live: boolean;
   onClose: () => void;
 }) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -718,6 +762,19 @@ function PortfolioModal({
                   {t.mode === "live" ? "实盘" : "演练"}
                 </span>
               )}
+              <span
+                className="flex items-center gap-1 text-[10px] text-mut"
+                title={
+                  live ? "盘口实时推送" : "实时通道未连接,已降级为 30 秒轮询"
+                }
+              >
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${
+                    live ? "bg-up" : "bg-mut/50"
+                  }`}
+                />
+                {live ? "实时" : "轮询"}
+              </span>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 font-mono text-[11px] text-mut">
               <span className="select-all break-all">{data.address}</span>
@@ -1015,8 +1072,22 @@ function PortfolioPanel() {
     };
   }, [load]);
 
-  const positions = data?.positions ?? [];
-  const canOpen = data?.configured === true;
+  // 订阅持仓 token 的实时盘口;仓位变了会自动重订
+  const tokenIds = useMemo(
+    () =>
+      (data?.positions ?? [])
+        .map((p) => p.asset)
+        .filter((a): a is string => Boolean(a)),
+    [data],
+  );
+  const { prices, live } = useLivePrices(tokenIds);
+  const view = useMemo(
+    () => (data ? withLivePrices(data, prices) : null),
+    [data, prices],
+  );
+
+  const positions = view?.positions ?? [];
+  const canOpen = view?.configured === true;
 
   return (
     <>
@@ -1030,21 +1101,35 @@ function PortfolioPanel() {
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-xs font-medium tracking-wide text-ink2">
           我的持仓
-          {data?.address && (
+          {view?.address && (
             <span
               className="ml-2 font-mono text-[10px] text-mut"
-              title={`交易钱包 ${data.address}`}
+              title={`交易钱包 ${view.address}`}
             >
-              {shortAddr(data.address)}
+              {shortAddr(view.address)}
             </span>
           )}
         </h2>
         <span className="flex items-center gap-2 text-[10px] text-mut">
-          {updatedAt && (
-            <span title={`每 ${PORTFOLIO_POLL_MS / 1000} 秒自动刷新`}>
-              {new Date(updatedAt).toLocaleTimeString("zh-CN", { hour12: false })}
-            </span>
-          )}
+          <span
+            className="flex items-center gap-1"
+            title={
+              live
+                ? "盘口实时推送,价格与盈亏逐笔更新"
+                : `实时通道未连接,已降级为每 ${PORTFOLIO_POLL_MS / 1000} 秒轮询`
+            }
+          >
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                live ? "bg-up" : "bg-mut/50"
+              }`}
+            />
+            {live
+              ? "实时"
+              : updatedAt
+                ? new Date(updatedAt).toLocaleTimeString("zh-CN", { hour12: false })
+                : "连接中"}
+          </span>
           <button
             onClick={(e) => {
               e.stopPropagation(); // 否则点刷新会连带展开详情弹窗
@@ -1058,9 +1143,9 @@ function PortfolioPanel() {
         </span>
       </div>
 
-      {!data ? (
+      {!view ? (
         <p className="text-[11px] text-mut">读取中…</p>
-      ) : !data.configured ? (
+      ) : !view.configured ? (
         <p className="text-[11px] leading-4 text-mut">
           交易钱包不可用:检查 <code>POLYMARKET_PRIVATE_KEY</code> 与{" "}
           <code>POLYMARKET_RELAYER_KEY</code>。
@@ -1068,14 +1153,14 @@ function PortfolioPanel() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-1.5">
-            <Stat label="总权益" value={fmtUsd(data.equity ?? 0)} />
-            <Stat label="可用现金" value={fmtUsd(data.balanceUsd ?? 0)} />
-            <Stat label="未实现盈亏" value={<Pnl value={data.unrealizedPnl ?? 0} />} />
-            <Stat label="已实现盈亏" value={<Pnl value={data.realizedPnl ?? 0} />} />
+            <Stat label="总权益" value={fmtUsd(view.equity ?? 0)} />
+            <Stat label="可用现金" value={fmtUsd(view.balanceUsd ?? 0)} />
+            <Stat label="未实现盈亏" value={<Pnl value={view.unrealizedPnl ?? 0} />} />
+            <Stat label="已实现盈亏" value={<Pnl value={view.realizedPnl ?? 0} />} />
           </div>
 
-          {data.error ? (
-            <p className="mt-2 text-[11px] text-down-ink">{data.error}</p>
+          {view.error ? (
+            <p className="mt-2 text-[11px] text-down-ink">{view.error}</p>
           ) : positions.length === 0 ? (
             <p className="mt-3 text-[11px] leading-4 text-mut">
               当前没有未平仓仓位。下单后会在这里显示实时现值与盈亏。
@@ -1109,8 +1194,8 @@ function PortfolioPanel() {
         </>
       )}
     </section>
-    {open && data?.configured && (
-      <PortfolioModal data={data} onClose={() => setOpen(false)} />
+    {open && view?.configured && (
+      <PortfolioModal data={view} live={live} onClose={() => setOpen(false)} />
     )}
     </>
   );

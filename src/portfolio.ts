@@ -13,6 +13,8 @@ const COLLATERAL = "COLLATERAL" as AssetType;
 
 export type PortfolioPosition = {
   conditionId: string;
+  /** token id,前端按它订阅实时盘口 */
+  asset?: string;
   outcome?: string;
   size?: number;
   avgPrice?: number;
