@@ -13,6 +13,7 @@ import {
   WATCH_RELOAD_MS,
 } from "../config";
 import { query } from "../db";
+import { sendAlert } from "../telegram";
 
 // 可用 RTDS_URL 覆盖,便于测试重连路径
 const RTDS_URL = process.env.RTDS_URL || "wss://ws-live-data.polymarket.com";
@@ -72,26 +73,6 @@ async function writeState(connected: boolean): Promise<void> {
       lastError,
     ],
   );
-}
-
-async function sendAlert(text: string): Promise<void> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_ALERT_CHAT_ID;
-  if (!token || !chatId) return;
-  try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        disable_web_page_preview: true,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch (err) {
-    console.error(`watcher: Telegram 推送失败 ${String(err)}`);
-  }
 }
 
 /** 写入单条成交;返回 true 表示这是新行(而非去重命中) */

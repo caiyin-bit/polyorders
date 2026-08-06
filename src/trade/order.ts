@@ -1,5 +1,6 @@
 import { OrderSide, type Market } from "@polymarket/client";
 import { query } from "../db";
+import { sendAlert } from "../telegram";
 import { getTradeClient } from "./client";
 import { checkLimits, tradeLimits } from "./risk";
 
@@ -99,6 +100,38 @@ type Recorded = Omit<OrderResult, "id"> & {
   response?: unknown;
 };
 
+const ALERT_LABEL: Record<string, string> = {
+  blocked: "🚫 下单被风控拦截",
+  rejected: "❌ 交易所拒单",
+  failed: "❌ 下单失败",
+  submitted: "✅ 实盘下单已提交",
+};
+
+/**
+ * 订单告警文案;返回 null 表示不告警。
+ *
+ * 只报「钱真的动了」和「本该动却没动成」两类:dry-run 全程静默,否则演练
+ * 阶段会把告警刷成噪音,真出事时反而没人看。
+ */
+export function formatOrderAlert(
+  r: Pick<Recorded, "status" | "dryRun" | "request" | "market" | "amountUsd" | "error">,
+  id: number,
+): string | null {
+  if (r.dryRun) return null;
+  const label = ALERT_LABEL[r.status];
+  if (!label) return null;
+
+  const title = r.market?.question ?? r.request.market;
+  const amount = r.amountUsd != null ? `$${r.amountUsd}` : "";
+  const who = r.request.agentId ? ` [agent#${r.request.agentId}]` : "";
+  const lines = [
+    `${label} #${id}${who}`,
+    `${r.request.side} ${r.request.outcome} ${amount} — ${title}`,
+  ];
+  if (r.error) lines.push(r.error);
+  return lines.join("\n");
+}
+
 async function record(r: Recorded): Promise<OrderResult> {
   const { rows } = await query<{ id: number }>(
     `INSERT INTO orders
@@ -131,6 +164,10 @@ async function record(r: Recorded): Promise<OrderResult> {
       r.request.agentId ?? null,
     ],
   );
+  // 旁路推送:不 await,告警慢或失败都不该拖住下单响应
+  const alert = formatOrderAlert(r, rows[0].id);
+  if (alert) void sendAlert(alert);
+
   return {
     id: rows[0].id,
     status: r.status,

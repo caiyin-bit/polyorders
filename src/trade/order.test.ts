@@ -4,6 +4,7 @@ import {
   decimalsForTick,
   exposureUsd,
   floorShares,
+  formatOrderAlert,
   roundTo,
 } from "./order";
 
@@ -116,5 +117,62 @@ describe("exposureUsd:风控敞口折算", () => {
       exposureUsd({ side: "BUY", price: null, size: null, amountUsd: 2, refPrice: 0.2145 }),
       2,
     );
+  });
+});
+
+describe("formatOrderAlert:告警策略", () => {
+  const req = { market: "some-slug", outcome: "yes" as const, side: "BUY" as const };
+  const base = { request: req, amountUsd: 2, error: null, market: null };
+
+  it("dry-run 一律不告警", () => {
+    // 演练阶段会产生大量订单,全推会把告警刷成噪音
+    for (const status of ["dry_run", "blocked", "failed", "submitted"]) {
+      assert.equal(formatOrderAlert({ ...base, status, dryRun: true }, 1), null);
+    }
+  });
+
+  it("实盘的风控拦截、拒单、失败、提交都告警", () => {
+    for (const status of ["blocked", "rejected", "failed", "submitted"]) {
+      assert.notEqual(
+        formatOrderAlert({ ...base, status, dryRun: false }, 1),
+        null,
+        `${status} 未告警`,
+      );
+    }
+  });
+
+  it("未知状态不告警", () => {
+    assert.equal(formatOrderAlert({ ...base, status: "pending", dryRun: false }, 1), null);
+  });
+
+  it("带上订单号、方向、金额与市场标题", () => {
+    const text = formatOrderAlert(
+      { ...base, status: "submitted", dryRun: false, market: { question: "会不会下雨?" } as never },
+      42,
+    );
+    assert.match(text ?? "", /#42/);
+    assert.match(text ?? "", /BUY yes \$2/);
+    assert.match(text ?? "", /会不会下雨\?/);
+  });
+
+  it("附上错误原文,便于直接判断原因", () => {
+    const text = formatOrderAlert(
+      { ...base, status: "blocked", dryRun: false, error: "超出单笔上限:$6 > $5" },
+      7,
+    );
+    assert.match(text ?? "", /超出单笔上限/);
+  });
+
+  it("标记发起的 agent,便于追责", () => {
+    const text = formatOrderAlert(
+      { ...base, request: { ...req, agentId: 3 }, status: "submitted", dryRun: false },
+      8,
+    );
+    assert.match(text ?? "", /agent#3/);
+  });
+
+  it("无市场信息时退回原始市场引用", () => {
+    const text = formatOrderAlert({ ...base, status: "failed", dryRun: false }, 9);
+    assert.match(text ?? "", /some-slug/);
   });
 });

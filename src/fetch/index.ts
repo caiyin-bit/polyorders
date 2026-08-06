@@ -1,4 +1,5 @@
 import { getPool, query } from "../db";
+import { assertEnv } from "../env";
 import { fetchCandidates } from "./candidates";
 import { fetchLive, fetchWatch } from "./live";
 import { fetchPositions } from "./positions";
@@ -40,6 +41,7 @@ function runStep(
 }
 
 async function main() {
+  assertEnv("worker");
   const step = argValue("step");
   const force = process.argv.includes("--force");
   const maxArg = argValue("max");
