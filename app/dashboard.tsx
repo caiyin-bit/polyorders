@@ -294,6 +294,8 @@ export default function Dashboard({
               {visible.map((r) => {
                 const isTop = r.rank <= config.topN;
                 const trades = feedByAddr.get(r.address);
+                // 有动向行时,柱状图单元格纵跨两行,在合并区域内居中
+                const hasFeed = Boolean(trades && trades.length > 0);
                 return (
                   <Fragment key={r.address}>
                     <tr
@@ -356,8 +358,11 @@ export default function Dashboard({
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
                         {r.score.toFixed(3)}
                       </td>
-                      <td className="py-1.5 pr-4">
-                        <div className="flex justify-end">
+                      <td
+                        rowSpan={hasFeed ? 2 : 1}
+                        className="px-4 py-1.5 align-middle"
+                      >
+                        <div className="flex justify-center">
                           <Spark values={r.spark} />
                         </div>
                       </td>
@@ -367,7 +372,8 @@ export default function Dashboard({
                         onClick={() => openWallet(r.address)}
                         className="cursor-pointer hover:bg-panel2"
                       >
-                        <td colSpan={8} className="max-w-0 px-4 pb-2.5 pt-0">
+                        {/* 7 而非 8:最后一列已被上一行的 rowSpan 占用 */}
+                        <td colSpan={7} className="max-w-0 px-4 pb-2.5 pt-0">
                           <FeedLines trades={trades} />
                         </td>
                       </tr>
