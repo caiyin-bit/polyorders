@@ -16,6 +16,8 @@ export type OrderRequest = {
   limitPrice?: number;
   /** 第二期跟单时标记来源地址 */
   sourceAddress?: string;
+  /** 由 agent 发起时记录是哪个 agent,便于审计 */
+  agentId?: number;
 };
 
 export type OrderResult = {
@@ -80,8 +82,9 @@ async function record(r: Recorded): Promise<OrderResult> {
     `INSERT INTO orders
        (source_address, condition_id, token_id, market_slug, title, outcome,
         side, order_type, price, size, amount_usd, status, dry_run,
-        clob_order_id, clob_status, error, request_json, response_json, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+        clob_order_id, clob_status, error, request_json, response_json, created_at,
+        agent_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
      RETURNING id`,
     [
       r.request.sourceAddress ?? null,
@@ -103,6 +106,7 @@ async function record(r: Recorded): Promise<OrderResult> {
       jsonSafe(r.request),
       r.response === undefined ? null : jsonSafe(r.response),
       Date.now(),
+      r.request.agentId ?? null,
     ],
   );
   return {

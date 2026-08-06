@@ -54,6 +54,16 @@ pnpm dev
 - 资金主体默认是私钥派生的 **Deposit Wallet**,与在官网充值的钱包很可能不是同一个;doctor 会把地址打出来。要沿用官网账户,把 `POLYMARKET_WALLET_ADDRESS` 设为该钱包地址
 - 抵押品是 **pUSD**(非 USDC.e),CLOB V2 自 2026-04-28 起生效,V1 SDK 与 V1 签名订单已失效
 
+## Agent 接入
+
+让自己的 AI Agent 接入,读榜单/查钱包/下单。**注册由 Agent 自主完成,人只负责转交指令与最后认领**。
+
+- 仪表盘左栏「Agent 接入」→「接入新 Agent」生成可复制的指令,发给 Agent 即可
+- Agent 读 `/SKILL.md`(公开、免登录,内容按请求 origin 动态生成)→ 调 `POST /api/agent/register` → 拿到 `apiKey` 与 `claimUrl`
+- **认领是权限闸门**:未认领的 agent 调任何端点都是 403;认领页受登录保护,只有 Telegram 白名单账号能完成
+- Agent 端点在 `/api/agent/*`,鉴权走 `Authorization: Bearer <apiKey>`。因 middleware 跑在 Edge 访问不了数据库,该命名空间由 middleware 放行、改在各路由内用 `requireAgent` 校验
+- 下单需 `trade` 权限(默认不给,面板上单独授予),且与人工下单**共用同一套 dry-run 开关与限额**,agent 无法绕过;每笔订单记录 `agent_id` 以备审计
+
 ## 数据说明
 
 - 去重键:`closed_positions (address, condition_id, outcome)`,重复抓取时更新为最新值

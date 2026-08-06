@@ -7,7 +7,23 @@ export const metadata: Metadata = { title: "登录 · polyorders" };
 // 请求时渲染:bot 配置来自运行时环境变量,构建期不可用(Docker 构建仅注入 DATABASE_URL)
 export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+/**
+ * 只接受站内绝对路径,防开放重定向:
+ * `//evil.com` 是协议相对 URL,反斜杠也会被部分浏览器规范化成斜杠。
+ */
+function safeNext(value: string | undefined): string {
+  if (!value || !value.startsWith("/")) return "/";
+  if (value.startsWith("//") || value.includes("\\")) return "/";
+  return value;
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const next = safeNext((await searchParams).next);
+
   let botId = "";
   try {
     botId = telegramBotId();
@@ -23,7 +39,7 @@ export default function LoginPage() {
 
         <div className="mt-14 flex w-full flex-col items-center">
           {botId ? (
-            <LoginButton botId={botId} />
+            <LoginButton botId={botId} next={next} />
           ) : (
             <p className="text-sm text-down-ink">服务端未配置登录参数</p>
           )}

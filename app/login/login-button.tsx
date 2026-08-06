@@ -20,7 +20,13 @@ const ERRORS: Record<string, string> = {
   network: "登录失败,请重试",
 };
 
-export default function LoginButton({ botId }: { botId: string }) {
+export default function LoginButton({
+  botId,
+  next = "/",
+}: {
+  botId: string;
+  next?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +41,7 @@ export default function LoginButton({ botId }: { botId: string }) {
         body: JSON.stringify({ id_token: idToken }),
       });
       if (res.ok) {
-        window.location.href = "/";
+        window.location.href = next;
         return;
       }
       setError(res.status === 403 ? ERRORS.denied : ERRORS.invalid);

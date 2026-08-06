@@ -23,3 +23,9 @@ export const TRADES_KEEP_PER_ADDRESS = 50;
 // 默认取保守值:即使环境变量漏配,也不会放出大额单。
 export const TRADE_MAX_USD_DEFAULT = 5;
 export const TRADE_DAILY_MAX_USD_DEFAULT = 20;
+
+// Agent 接入:注册端点必须匿名可调(agent 没有凭据),因此靠「未认领配额 +
+// 过期清理」限制滥用。选配额而非 IP 限速,是因为它不依赖内存状态,
+// 重启与多容器都成立。
+export const AGENT_UNCLAIMED_LIMIT = 20;
+export const AGENT_CLAIM_TTL_MS = 24 * 3600_000;
