@@ -51,6 +51,24 @@ describe("数值格式化", () => {
     assert.equal(fmtUsd(-950), "-$950");
   });
 
+  // 自有账户是几美元量级,取整会把 $0.02 的浮盈显示成 $0,看着像没盈亏
+  it("fmtUsd 对 10 美元以下保留分位", () => {
+    assert.equal(fmtUsd(0.0232), "$0.02");
+    assert.equal(fmtUsd(2.0232), "$2.02");
+    assert.equal(fmtUsd(9.937), "$9.94");
+    assert.equal(fmtUsd(-0.0232), "-$0.02");
+  });
+
+  it("fmtUsd 在 10 美元处切换到整数", () => {
+    assert.equal(fmtUsd(9.99), "$9.99");
+    assert.equal(fmtUsd(10), "$10");
+    assert.equal(fmtUsd(17.14), "$17");
+  });
+
+  it("fmtUsd 的 0 显示为 $0.00 而非空", () => {
+    assert.equal(fmtUsd(0), "$0.00");
+  });
+
   it("fmtUsd 与 fmtPct 的空值返回占位符", () => {
     assert.equal(fmtUsd(null), "-");
     assert.equal(fmtPct(null), "-");

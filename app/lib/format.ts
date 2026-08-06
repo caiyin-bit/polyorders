@@ -7,16 +7,24 @@ export function fmtPct(x: number | null): string {
   return `${(x * 100).toFixed(1)}%`;
 }
 
+/**
+ * 金额格式化,按量级保留约三位有效数字。
+ *
+ * 10 美元以下保留分位:榜单地址是几十万美元量级,取整没问题,但自有账户只有
+ * 几美元——整数化会把 $0.02 的浮盈显示成 $0,看着像没盈亏。
+ */
 export function fmtUsd(x: number | null): string {
   if (x === null) return "-";
   const abs = Math.abs(x);
   const s =
     abs >= 1_000_000
-      ? `${(x / 1_000_000).toFixed(2)}M`
+      ? `${(abs / 1_000_000).toFixed(2)}M`
       : abs >= 1_000
-        ? `${(x / 1_000).toFixed(1)}k`
-        : x.toFixed(0);
-  return `${x < 0 ? "-" : ""}$${s.replace("-", "")}`;
+        ? `${(abs / 1_000).toFixed(1)}k`
+        : abs >= 10
+          ? abs.toFixed(0)
+          : abs.toFixed(2);
+  return `${x < 0 ? "-" : ""}$${s}`;
 }
 
 // 时间格式化分两套,单位不同,用错会显示成公元五万年——务必按列的单位选:
