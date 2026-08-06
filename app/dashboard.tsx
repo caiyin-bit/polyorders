@@ -1147,6 +1147,13 @@ const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
   failed: { label: "失败", cls: "bg-down/15 text-down-ink" },
 };
 
+/**
+ * 手动下单暂停开关。面板与历史记录保留可见,但输入与提交一律禁用。
+ * 只影响本页表单——agent 端点 /api/agent/trade 与 CLI 不受影响。
+ * 恢复时改回 false 即可。
+ */
+const MANUAL_TRADE_DISABLED = true;
+
 function TradePanel() {
   const [market, setMarket] = useState("");
   const [outcome, setOutcome] = useState<"yes" | "no">("yes");
@@ -1178,6 +1185,8 @@ function TradePanel() {
   }, [load]);
 
   async function submit() {
+    // 防御性:按钮已禁用,这里再挡一道,免得以后改动只解开按钮却漏了这里
+    if (MANUAL_TRADE_DISABLED) return;
     setBusy(true);
     setError(null);
     try {
@@ -1204,9 +1213,9 @@ function TradePanel() {
   }
 
   const inputCls =
-    "w-full rounded border border-line bg-panel2 px-2 py-1 text-xs placeholder-mut focus:border-accent focus:outline-none";
+    "w-full rounded border border-line bg-panel2 px-2 py-1 text-xs placeholder-mut focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-40";
   const tabCls = (on: boolean) =>
-    `flex-1 rounded px-2 py-1 text-[11px] ${on ? "bg-accent text-white" : "bg-panel2 text-mut"}`;
+    `flex-1 rounded px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${on ? "bg-accent text-white" : "bg-panel2 text-mut"}`;
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">
@@ -1234,18 +1243,35 @@ function TradePanel() {
           onChange={(e) => setMarket(e.target.value)}
           placeholder="市场 slug / 链接 / conditionId"
           className={inputCls}
+          disabled={MANUAL_TRADE_DISABLED}
         />
         <div className="flex gap-1">
-          <button className={tabCls(outcome === "yes")} onClick={() => setOutcome("yes")}>
+          <button
+            className={tabCls(outcome === "yes")}
+            onClick={() => setOutcome("yes")}
+            disabled={MANUAL_TRADE_DISABLED}
+          >
             YES
           </button>
-          <button className={tabCls(outcome === "no")} onClick={() => setOutcome("no")}>
+          <button
+            className={tabCls(outcome === "no")}
+            onClick={() => setOutcome("no")}
+            disabled={MANUAL_TRADE_DISABLED}
+          >
             NO
           </button>
-          <button className={tabCls(side === "BUY")} onClick={() => setSide("BUY")}>
+          <button
+            className={tabCls(side === "BUY")}
+            onClick={() => setSide("BUY")}
+            disabled={MANUAL_TRADE_DISABLED}
+          >
             买入
           </button>
-          <button className={tabCls(side === "SELL")} onClick={() => setSide("SELL")}>
+          <button
+            className={tabCls(side === "SELL")}
+            onClick={() => setSide("SELL")}
+            disabled={MANUAL_TRADE_DISABLED}
+          >
             卖出
           </button>
         </div>
@@ -1256,6 +1282,7 @@ function TradePanel() {
             inputMode="decimal"
             placeholder={`买入金额 $${limits ? `(单笔上限 ${limits.maxUsd})` : ""}`}
             className={inputCls}
+            disabled={MANUAL_TRADE_DISABLED}
           />
         ) : (
           <input
@@ -1264,6 +1291,7 @@ function TradePanel() {
             inputMode="decimal"
             placeholder="卖出份额"
             className={inputCls}
+            disabled={MANUAL_TRADE_DISABLED}
           />
         )}
         <input
@@ -1272,15 +1300,28 @@ function TradePanel() {
           inputMode="decimal"
           placeholder="限价(留空为市价单)"
           className={inputCls}
+          disabled={MANUAL_TRADE_DISABLED}
         />
         <button
           onClick={submit}
-          disabled={busy || !market}
-          className="w-full rounded bg-accent px-2 py-1.5 text-xs text-white disabled:opacity-40"
+          disabled={MANUAL_TRADE_DISABLED || busy || !market}
+          className="w-full rounded bg-accent px-2 py-1.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {busy ? "提交中…" : limits?.enabled ? "确认下单" : "演练下单"}
+          {MANUAL_TRADE_DISABLED
+            ? "已停用"
+            : busy
+              ? "提交中…"
+              : limits?.enabled
+                ? "确认下单"
+                : "演练下单"}
         </button>
       </div>
+
+      {MANUAL_TRADE_DISABLED && (
+        <p className="mt-2 text-[11px] leading-4 text-mut">
+          手动下单已暂停,面板与历史记录仅供查看。agent 端点与 CLI 不受影响。
+        </p>
+      )}
 
       {error && <p className="mt-2 text-[11px] text-down-ink">{error}</p>}
 
