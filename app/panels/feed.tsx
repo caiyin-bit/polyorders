@@ -33,33 +33,45 @@ export function FeedLines({
             >
               {buy ? "买" : "卖"}
             </span>
+            {/* 标题增长到上限即止:不封顶的话宽屏下会把右侧明细一路推到边缘,
+                中间留出大片空白。上限内仍用 flex-1 撑开,好让各行明细列对齐 */}
             {t.event_slug ? (
               <a
                 href={`https://polymarket.com/event/${t.event_slug}`}
                 target="_blank"
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="min-w-0 flex-1 truncate text-ink2 hover:text-accent hover:underline"
+                title={t.title ?? undefined}
+                className="min-w-0 max-w-[30rem] flex-1 truncate text-ink2 hover:text-accent hover:underline"
               >
                 {t.title ?? "-"}
               </a>
             ) : (
-              <span className="min-w-0 flex-1 truncate text-ink2">
+              <span
+                title={t.title ?? undefined}
+                className="min-w-0 max-w-[30rem] flex-1 truncate text-ink2"
+              >
                 {t.title ?? "-"}
               </span>
             )}
+            {/* 以下四列定宽,保证跨行对齐——金额和价格靠右对齐才好上下比对 */}
             <span
-              className={`shrink-0 tabular-nums ${
+              className={`w-16 shrink-0 text-right tabular-nums ${
                 buy ? "text-up-ink" : "text-down-ink"
               }`}
             >
               {fmtUsd(t.usdc_size)}
             </span>
-            <span className="shrink-0 tabular-nums">
+            <span className="w-14 shrink-0 text-right tabular-nums">
               @{t.price !== null ? t.price.toFixed(2) : "-"}
             </span>
-            <span className="min-w-0 max-w-40 truncate">{t.outcome ?? ""}</span>
-            <span className="ml-auto shrink-0" suppressHydrationWarning>
+            <span
+              className="w-36 shrink-0 truncate"
+              title={t.outcome ?? undefined}
+            >
+              {t.outcome ?? ""}
+            </span>
+            <span className="w-24 shrink-0 tabular-nums" suppressHydrationWarning>
               {fmtClock(t.timestamp * 1000)}
             </span>
           </li>
