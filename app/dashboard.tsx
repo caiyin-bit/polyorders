@@ -614,10 +614,10 @@ type OrderRow = {
 
 const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
   dry_run: { label: "演练", cls: "bg-panel2 text-mut" },
-  submitted: { label: "已提交", cls: "bg-up text-up-ink" },
-  rejected: { label: "被拒", cls: "bg-down text-down-ink" },
-  blocked: { label: "风控拦截", cls: "bg-down text-down-ink" },
-  failed: { label: "失败", cls: "bg-down text-down-ink" },
+  submitted: { label: "已提交", cls: "bg-up/15 text-up-ink" },
+  rejected: { label: "被拒", cls: "bg-down/15 text-down-ink" },
+  blocked: { label: "风控拦截", cls: "bg-down/15 text-down-ink" },
+  failed: { label: "失败", cls: "bg-down/15 text-down-ink" },
 };
 
 function TradePanel() {
@@ -688,7 +688,7 @@ function TradePanel() {
         {limits && (
           <span
             className={`rounded px-1.5 py-0.5 text-[10px] ${
-              limits.enabled ? "bg-down text-down-ink" : "bg-panel2 text-mut"
+              limits.enabled ? "bg-down/15 text-down-ink" : "bg-panel2 text-mut"
             }`}
             title={
               limits.enabled
