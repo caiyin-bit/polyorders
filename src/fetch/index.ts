@@ -1,6 +1,6 @@
 import { getPool, query } from "../db";
 import { fetchCandidates } from "./candidates";
-import { fetchLive } from "./live";
+import { fetchLive, fetchWatch } from "./live";
 import { fetchPositions } from "./positions";
 import { prefilter } from "./prefilter";
 import { computeScores } from "./score";
@@ -44,6 +44,19 @@ async function main() {
   const force = process.argv.includes("--force");
   const maxArg = argValue("max");
   const max = maxArg ? Number(maxArg) : undefined;
+
+  // watch 每 5 分钟一轮,绕过 fetch_runs:否则 288 行/天会刷满抓取面板的
+  // 会话列表,且未完结行会让面板长期误报「抓取中」
+  if (step === "watch") {
+    const started = Date.now();
+    const r = await fetchWatch();
+    console.log(
+      `watch: ok=${r.ok} failed=${r.failed} in ${((Date.now() - started) / 1000).toFixed(1)}s`,
+    );
+    await getPool().end();
+    if (r.failed > 0 && r.ok === 0) process.exit(1);
+    return;
+  }
 
   // 一次 main() 调用 = 一个抓取会话,各步骤共享 run_group 便于面板分组
   const runGroup = String(Date.now());

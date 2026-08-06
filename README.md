@@ -63,6 +63,7 @@ pnpm dev
 - **认领是权限闸门**:未认领的 agent 调任何端点都是 403;认领页受登录保护,只有 Telegram 白名单账号能完成
 - Agent 端点在 `/api/agent/*`,鉴权走 `Authorization: Bearer <apiKey>`。因 middleware 跑在 Edge 访问不了数据库,该命名空间由 middleware 放行、改在各路由内用 `requireAgent` 校验
 - 下单需 `trade` 权限(默认不给,面板上单独授予),且与人工下单**共用同一套 dry-run 开关与限额**,agent 无法绕过;每笔订单记录 `agent_id` 以备审计
+- **本地 CLI**:`cli/` 是零依赖命令行 `polyorder`(`npm i -g ./cli` 安装),包装上述 agent API,供开发机上的 Claude Code / Codex 直接读榜单、查钱包、下单,详见 `cli/README.md`
 
 ## 数据说明
 

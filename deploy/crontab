@@ -1,3 +1,5 @@
 # 北京时间(容器 TZ=Asia/Shanghai)。live 每 2 小时(双数小时的 23 分);全量每日 10:00
 23 */2 * * * /app/scripts/run-fetch.sh 5 >> /var/log/fetch/live.log 2>&1
 0 10 * * * /app/scripts/run-fetch.sh all >> /var/log/fetch/full.log 2>&1
+# 关注池定向拉取:空池秒退,不写 fetch_runs、失败不告警
+*/5 * * * * /app/scripts/run-fetch.sh watch >> /var/log/fetch/watch.log 2>&1

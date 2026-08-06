@@ -1,0 +1,56 @@
+import { WATCH_POOL_LIMIT } from "@/src/config";
+import { query } from "@/src/db";
+
+export const dynamic = "force-dynamic";
+
+// 受 middleware 保护(登录后才可达)
+
+export async function GET() {
+  const { rows } = await query(
+    `SELECT w.address, w.added_at, w.last_fetched_at AS fetched_at, c.username, s.rank,
+            (SELECT MAX("timestamp") FROM trades t WHERE t.address = w.address) AS last_trade_ts
+     FROM watchlist w
+     LEFT JOIN candidates c ON c.address = w.address
+     LEFT JOIN scores s ON s.address = w.address
+     ORDER BY w.added_at`,
+  );
+  return Response.json({ watchlist: rows, limit: WATCH_POOL_LIMIT });
+}
+
+export async function POST(req: Request) {
+  let address = "";
+  try {
+    address = String(((await req.json()) as { address?: unknown }).address ?? "");
+  } catch {}
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    return Response.json({ error: "地址格式不合法" }, { status: 400 });
+  }
+  address = address.toLowerCase();
+
+  const { rows } = await query<{ n: number }>(
+    "SELECT COUNT(*)::int AS n FROM watchlist",
+  );
+  if (rows[0].n >= WATCH_POOL_LIMIT) {
+    return Response.json(
+      { error: `关注池已满(${WATCH_POOL_LIMIT} 个),请先移除一个` },
+      { status: 409 },
+    );
+  }
+
+  await query(
+    "INSERT INTO watchlist (address, added_at) VALUES ($1, $2) ON CONFLICT (address) DO NOTHING",
+    [address, Date.now()],
+  );
+  return Response.json({ ok: true });
+}
+
+export async function DELETE(req: Request) {
+  let address = "";
+  try {
+    address = String(((await req.json()) as { address?: unknown }).address ?? "");
+  } catch {}
+  if (!address) return Response.json({ error: "缺少 address" }, { status: 400 });
+
+  await query("DELETE FROM watchlist WHERE address = $1", [address.toLowerCase()]);
+  return Response.json({ ok: true });
+}

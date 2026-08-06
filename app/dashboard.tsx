@@ -790,6 +790,104 @@ function TradePanel() {
   );
 }
 
+/* ---------- 实时关注池 ---------- */
+
+type WatchRow = {
+  address: string;
+  added_at: number;
+  username: string | null;
+  rank: number | null;
+  fetched_at: number | null;
+  last_trade_ts: number | null;
+};
+
+function WatchStar({
+  watched,
+  onToggle,
+  size = "text-sm",
+}: {
+  watched: boolean;
+  onToggle: () => void;
+  size?: string;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      title={watched ? "移出关注池" : "加入关注池(5 分钟级更新)"}
+      className={`shrink-0 leading-none ${size} ${
+        watched ? "text-accent" : "text-mut/50 hover:text-accent"
+      }`}
+    >
+      {watched ? "★" : "☆"}
+    </button>
+  );
+}
+
+function WatchPanel({
+  watch,
+  limit,
+  error,
+  onRemove,
+}: {
+  watch: WatchRow[];
+  limit: number;
+  error: string | null;
+  onRemove: (address: string) => void;
+}) {
+  return (
+    <section className="rounded-lg border border-line bg-panel p-4">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-xs font-medium tracking-wide text-ink2">
+          实时关注
+          <span className="ml-2 font-mono tabular-nums text-mut">
+            {watch.length}/{limit}
+          </span>
+        </h2>
+        <span className="text-[10px] text-mut">每 5 分钟更新</span>
+      </div>
+
+      {watch.length === 0 ? (
+        <p className="text-[11px] leading-4 text-mut">
+          点榜单行首的 ☆ 把地址加入关注池,持仓与动向将以 5 分钟级刷新。
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {watch.map((w) => (
+            <li
+              key={w.address}
+              className="flex items-center gap-2 rounded border border-line bg-panel2 px-2 py-1.5 text-[11px]"
+            >
+              <span className="font-mono">{shortAddr(w.address)}</span>
+              {w.rank !== null && (
+                <span className="rounded bg-panel px-1 font-mono text-[10px] text-mut">
+                  #{w.rank}
+                </span>
+              )}
+              {w.username && <span className="truncate text-mut">{w.username}</span>}
+              <span className="ml-auto shrink-0 text-mut">
+                {w.fetched_at
+                  ? `${Math.max(0, Math.round((Date.now() - w.fetched_at) / 60000))} 分钟前`
+                  : "待首轮"}
+              </span>
+              <button
+                onClick={() => onRemove(w.address)}
+                className="shrink-0 text-down-ink hover:underline"
+              >
+                移除
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && <p className="mt-2 text-[11px] text-down-ink">{error}</p>}
+    </section>
+  );
+}
+
 /* ---------- Agent 接入面板 ---------- */
 
 type AgentRow = {
@@ -1187,9 +1285,13 @@ function EquityCurve({ points }: { points: Array<[number, number]> }) {
 function WalletModal({
   address,
   onClose,
+  watched,
+  onToggleWatch,
 }: {
   address: string;
   onClose: () => void;
+  watched: boolean;
+  onToggleWatch: () => void;
 }) {
   const [detail, setDetail] = useState<WalletDetail | null>(null);
   const [curve, setCurve] = useState<Array<[number, number]> | null>(null);
@@ -1264,6 +1366,7 @@ function WalletModal({
         <div className="flex shrink-0 items-start justify-between border-b border-line px-6 py-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
+              <WatchStar watched={watched} onToggle={onToggleWatch} size="text-base" />
               <h2 className="font-mono text-base font-semibold">
                 {shortAddr(address)}
               </h2>
@@ -1538,6 +1641,54 @@ export default function Dashboard({
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(15);
   const [selected, setSelected] = useState<string | null>(null);
+  const [watch, setWatch] = useState<WatchRow[]>([]);
+  const [watchLimit, setWatchLimit] = useState(5);
+  const [watchError, setWatchError] = useState<string | null>(null);
+
+  const loadWatch = useCallback(async () => {
+    try {
+      const res = await fetch("/api/watchlist");
+      const data = (await res.json()) as { watchlist: WatchRow[]; limit: number };
+      setWatch(data.watchlist);
+      setWatchLimit(data.limit);
+    } catch {
+      /* 关注池不可用不影响主看板 */
+    }
+  }, []);
+
+  // 30 秒轮询,让「x 分钟前」的新鲜度跟上 watch 抓取节奏
+  useEffect(() => {
+    loadWatch();
+    const t = setInterval(loadWatch, 30_000);
+    return () => clearInterval(t);
+  }, [loadWatch]);
+
+  const watchedSet = useMemo(
+    () => new Set(watch.map((w) => w.address.toLowerCase())),
+    [watch],
+  );
+
+  const toggleWatch = useCallback(
+    async (address: string) => {
+      setWatchError(null);
+      const isWatched = watchedSet.has(address.toLowerCase());
+      try {
+        const res = await fetch("/api/watchlist", {
+          method: isWatched ? "DELETE" : "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ address }),
+        });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          setWatchError(data.error ?? "操作失败");
+        }
+      } catch (err) {
+        setWatchError(String(err));
+      }
+      await loadWatch();
+    },
+    [watchedSet, loadWatch],
+  );
 
   useEffect(() => {
     setPage(0);
@@ -1623,6 +1774,12 @@ export default function Dashboard({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
       <div className="space-y-4">
         <FunnelPanel funnel={funnel} config={config} />
+        <WatchPanel
+          watch={watch}
+          limit={watchLimit}
+          error={watchError}
+          onRemove={toggleWatch}
+        />
         <TradePanel />
         <AgentPanel />
         <PipelinePanel />
@@ -1723,6 +1880,11 @@ export default function Dashboard({
                       </td>
                       <td className="max-w-52 py-1.5 pr-3">
                         <div className="flex items-baseline gap-2">
+                          <WatchStar
+                            watched={watchedSet.has(r.address.toLowerCase())}
+                            onToggle={() => toggleWatch(r.address)}
+                            size="text-xs"
+                          />
                           <span className="shrink-0 font-mono text-ink">
                             {shortAddr(r.address)}
                           </span>
@@ -1839,7 +2001,12 @@ export default function Dashboard({
       </section>
 
       {selected && (
-        <WalletModal address={selected} onClose={() => openWallet(null)} />
+        <WalletModal
+          address={selected}
+          onClose={() => openWallet(null)}
+          watched={watchedSet.has(selected.toLowerCase())}
+          onToggleWatch={() => toggleWatch(selected)}
+        />
       )}
     </div>
   );

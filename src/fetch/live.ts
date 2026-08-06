@@ -180,6 +180,34 @@ async function pruneOldTrades(): Promise<number> {
   return res.rowCount ?? 0;
 }
 
+/** 对给定地址各拉一轮:持仓快照整体替换 + 成交增量(live 与 watch 共用) */
+async function fetchAddresses(
+  tag: string,
+  addresses: string[],
+): Promise<{ ok: number; failed: number }> {
+  const limiter = createLimiter(3, 250);
+  let ok = 0;
+  let failed = 0;
+
+  await Promise.all(
+    addresses.map(async (address) => {
+      try {
+        const positions = await fetchOpenPositions(limiter, address);
+        await replaceOpenPositions(address, positions);
+        const newTrades = await fetchNewTrades(limiter, address);
+        ok++;
+        console.log(
+          `${tag}: ${address.slice(0, 10)}… open=${positions.length} newTrades=${newTrades}`,
+        );
+      } catch (err) {
+        failed++;
+        console.error(`${tag}: ${address} failed: ${String(err)}`);
+      }
+    }),
+  );
+  return { ok, failed };
+}
+
 /** step 5:抓取 Top N 地址的未平仓持仓快照与新增成交 */
 export async function fetchLive(): Promise<{ ok: number; failed: number }> {
   const { rows: targets } = await query<{ address: string }>(
@@ -191,30 +219,32 @@ export async function fetchLive(): Promise<{ ok: number; failed: number }> {
     return { ok: 0, failed: 0 };
   }
 
-  const limiter = createLimiter(3, 250);
-  let ok = 0;
-  let failed = 0;
-
-  await Promise.all(
-    targets.map(async ({ address }) => {
-      try {
-        const positions = await fetchOpenPositions(limiter, address);
-        await replaceOpenPositions(address, positions);
-        const newTrades = await fetchNewTrades(limiter, address);
-        ok++;
-        console.log(
-          `live: ${address.slice(0, 10)}… open=${positions.length} newTrades=${newTrades}`,
-        );
-      } catch (err) {
-        failed++;
-        console.error(`live: ${address} failed: ${String(err)}`);
-      }
-    }),
+  const result = await fetchAddresses(
+    "live",
+    targets.map((t) => t.address),
   );
 
   const pruned = await pruneOldTrades();
   if (pruned > 0) {
     console.log(`live: 清理 ${pruned} 条超出 ${TRADES_RETENTION_DAYS} 天保留窗口的成交`);
   }
-  return { ok, failed };
+  return result;
+}
+
+/**
+ * watch:定向拉取关注池地址,由 crond 每 5 分钟触发。
+ * 空池立即返回不发任何请求;不做 prune(保留窗口清理留在低频的 step 5)。
+ */
+export async function fetchWatch(): Promise<{ ok: number; failed: number }> {
+  const { rows } = await query<{ address: string }>(
+    "SELECT address FROM watchlist ORDER BY added_at",
+  );
+  if (rows.length === 0) return { ok: 0, failed: 0 };
+  const result = await fetchAddresses(
+    "watch",
+    rows.map((r) => r.address),
+  );
+  // 新鲜度记在 watchlist 自己身上(空仓地址在 open_positions 无行可查)
+  await query("UPDATE watchlist SET last_fetched_at = $1", [Date.now()]);
+  return result;
 }

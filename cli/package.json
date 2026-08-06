@@ -1,0 +1,12 @@
+{
+  "name": "polyorder-cli",
+  "version": "0.1.0",
+  "description": "polyorders 的本地命令行:读榜单、查钱包、下单,给人和 AI Agent 共用",
+  "type": "module",
+  "bin": {
+    "polyorder": "./polyorder.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
