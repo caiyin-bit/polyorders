@@ -97,8 +97,8 @@ type SortKey =
   | "score";
 
 const PAGE_SIZES = [15, 50, 100];
-// 第一页固定展示 Top N 行，后续页从第 FIRST_PAGE_SIZE + 1 条开始按 pageSize 分页
-const FIRST_PAGE_SIZE = 11;
+// 第一页固定展示最终入选的 Top N 行,后续页从第 N + 1 条开始按 pageSize 分页。
+// 行数直接取 config.topN,避免与 src/config.ts 的 TOP_N 各存一份而失配。
 
 function pageList(cur: number, count: number): number[] {
   const set = new Set([0, count - 1, cur - 1, cur, cur + 1]);
@@ -1407,15 +1407,16 @@ export default function Dashboard({
     return m;
   }, [feed]);
 
+  const firstPageSize = config.topN;
   const pageCount = Math.max(
     1,
-    1 + Math.ceil(Math.max(0, filtered.length - FIRST_PAGE_SIZE) / pageSize)
+    1 + Math.ceil(Math.max(0, filtered.length - firstPageSize) / pageSize)
   );
   const curPage = Math.min(page, pageCount - 1);
   const pageStart =
-    curPage === 0 ? 0 : FIRST_PAGE_SIZE + (curPage - 1) * pageSize;
+    curPage === 0 ? 0 : firstPageSize + (curPage - 1) * pageSize;
   const pageEnd = Math.min(
-    curPage === 0 ? FIRST_PAGE_SIZE : pageStart + pageSize,
+    curPage === 0 ? firstPageSize : pageStart + pageSize,
     filtered.length
   );
   const visible = filtered.slice(pageStart, pageEnd);

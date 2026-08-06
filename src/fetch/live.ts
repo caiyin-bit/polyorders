@@ -1,4 +1,9 @@
-import { DATA_API, TOP_N } from "../config";
+import {
+  DATA_API,
+  TOP_N,
+  TRADES_KEEP_PER_ADDRESS,
+  TRADES_RETENTION_DAYS,
+} from "../config";
 import { query, withTransaction } from "../db";
 import { createLimiter, fetchJson } from "../http";
 
@@ -151,6 +156,30 @@ async function fetchNewTrades(
   return inserted;
 }
 
+/**
+ * 清理保留窗口外的成交。每地址保底留最新 TRADES_KEEP_PER_ADDRESS 条,
+ * 以免不活跃地址被清空后增量游标失效、每轮重新回填。
+ * trades."timestamp" 为秒(API 原始值)。
+ */
+async function pruneOldTrades(): Promise<number> {
+  const cutoff = Math.floor(Date.now() / 1000) - TRADES_RETENTION_DAYS * 86400;
+  const res = await query(
+    `WITH keep AS (
+       SELECT id FROM (
+         SELECT id, row_number() OVER (
+           PARTITION BY address ORDER BY "timestamp" DESC
+         ) AS rn
+         FROM trades
+       ) ranked
+       WHERE rn <= $2
+     )
+     DELETE FROM trades
+     WHERE "timestamp" < $1 AND id NOT IN (SELECT id FROM keep)`,
+    [cutoff, TRADES_KEEP_PER_ADDRESS],
+  );
+  return res.rowCount ?? 0;
+}
+
 /** step 5:抓取 Top N 地址的未平仓持仓快照与新增成交 */
 export async function fetchLive(): Promise<{ ok: number; failed: number }> {
   const { rows: targets } = await query<{ address: string }>(
@@ -182,5 +211,10 @@ export async function fetchLive(): Promise<{ ok: number; failed: number }> {
       }
     }),
   );
+
+  const pruned = await pruneOldTrades();
+  if (pruned > 0) {
+    console.log(`live: 清理 ${pruned} 条超出 ${TRADES_RETENTION_DAYS} 天保留窗口的成交`);
+  }
   return { ok, failed };
 }
