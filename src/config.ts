@@ -1,7 +1,5 @@
 export const DATA_API = "https://data-api.polymarket.com";
 
-export const DB_PATH = process.env.DB_PATH ?? "data/polyorders.db";
-
 export const LEADERBOARD = {
   timePeriod: "MONTH",
   orderBy: "PNL",
