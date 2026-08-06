@@ -204,9 +204,11 @@ async function pruneOldTrades(): Promise<number> {
      )
      DELETE FROM trades t
      WHERE t.id NOT IN (SELECT id FROM keep)
+       -- 参数必须显式转型:CASE 分支里的 $n 类型未知,Postgres 推不出
+       -- 「bigint < unknown」的比较运算符,会报 42883
        AND t."timestamp" < CASE
-         WHEN t.address IN (SELECT address FROM tracked) THEN $4
-         ELSE $1
+         WHEN t.address IN (SELECT address FROM tracked) THEN $4::bigint
+         ELSE $1::bigint
        END`,
     [cutoff, TRADES_KEEP_PER_ADDRESS, TOP_N, trackedCutoff],
   );
