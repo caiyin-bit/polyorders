@@ -51,7 +51,10 @@ pnpm dev
 - **默认 dry-run**:`TRADING_ENABLED` 必须显式等于 `true` 才会真正提交。dry-run 会真实签名订单(从而校验 tokenId、价格精度与费用)但不发给 CLOB,记录进 `orders` 表供逐字段核对
 - **双重限额**:`TRADE_MAX_USD` 单笔、`TRADE_DAILY_MAX_USD` 日累计(按北京时间自然日),留空则用 `src/config.ts` 中的保守默认值;市价买单额外用 SDK 的 `maxSpend` 卡住含手续费的总支出
 - **上手顺序**:配好 `.env` 中的 `POLYMARKET_PRIVATE_KEY` → `pnpm wallet:doctor` 确认资金主体钱包与余额 → `pnpm wallet:setup` 完成授权 → 面板发一笔 dry-run 核对 → 再开 `TRADING_ENABLED`
-- 资金主体默认是私钥派生的 **Deposit Wallet**,与在官网充值的钱包很可能不是同一个;doctor 会把地址打出来。要沿用官网账户,把 `POLYMARKET_WALLET_ADDRESS` 设为该钱包地址
+- 资金主体**必须**是私钥派生的 **Deposit Wallet**(doctor 会打印地址)。CLOB V2 只认它,把 `POLYMARKET_WALLET_ADDRESS` 指向官网的旧 Poly Proxy 钱包会被拒单(`maker address not allowed`),所以该变量应留空
+- 需要 **Relayer API Key**:polymarket.com → Settings → API Keys → Relayer API Keys 自助创建,把 Signer Address 与 Key 写进 `.env` 的 `POLYMARKET_RELAYER_ADDRESS` / `POLYMARKET_RELAYER_KEY`。没有它,SDK 无法 gasless 部署 Deposit Wallet
+- 旧 Poly Proxy 里的历史资金用 `tsx scripts/migrate-to-deposit-wallet.ts <proxy> <deposit> <美元>` 迁移过来
+- neg-risk 市场(多候选人盘)下单还需 neg-risk adapter 的授权,`pnpm wallet:setup` 会自动补齐缺口
 - 抵押品是 **pUSD**(非 USDC.e),CLOB V2 自 2026-04-28 起生效,V1 SDK 与 V1 签名订单已失效
 
 ## Agent 接入
