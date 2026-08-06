@@ -178,11 +178,18 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
   const price = req.limitPrice ? roundTo(req.limitPrice, priceDecimals) : null;
   const size = req.shares ? floorShares(req.shares) : null;
 
-  // 估算美元敞口供风控使用:SELL 没有直接金额,用限价或当前买一价折算
-  const refPrice =
-    price ?? Number(market.prices.bestBid ?? market.outcomes[req.outcome].price ?? 0);
+  // 美元敞口(供风控):限价单一律按 份额 × 限价——限价买单不传金额,
+  // 若按 amountUsd 取会得到 0 而被误判为无效单。市价买单用美元名义,
+  // 市价卖单用当前买一价折算。
+  const refPrice = Number(
+    market.prices.bestBid ?? market.outcomes[req.outcome].price ?? 0,
+  );
   const amountUsd =
-    req.side === "BUY" ? (req.amountUsd ?? 0) : (size ?? 0) * refPrice;
+    price !== null && size !== null
+      ? size * price
+      : req.side === "BUY"
+        ? (req.amountUsd ?? 0)
+        : (size ?? 0) * refPrice;
 
   const minSize = Number(market.trading.minimumOrderSize ?? 0);
   if (size !== null && minSize > 0 && size < minSize) {

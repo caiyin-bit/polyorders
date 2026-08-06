@@ -36,8 +36,16 @@ async function main() {
   if (allowances.length === 0) {
     console.log("授权         : 无 —— 先跑 pnpm wallet:setup");
   } else {
+    // 常规授权额度是 maxUint256,按美元格式化没有意义,直接标注为无上限
+    const UNLIMITED = 10n ** 30n;
     for (const [spender, amount] of allowances) {
-      console.log(`授权 ${spender} : ${amount > 0n ? fmtUsd(amount) : "0(未授权)"}`);
+      const text =
+        amount === 0n
+          ? "未授权"
+          : amount > UNLIMITED
+            ? "已授权(无上限)"
+            : fmtUsd(amount);
+      console.log(`授权 ${spender} : ${text}`);
     }
   }
 
