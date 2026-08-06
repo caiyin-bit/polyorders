@@ -356,10 +356,10 @@ export default function Dashboard({
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
                         {r.score.toFixed(3)}
                       </td>
-                      {/* w-full 让这一列吃掉表格的富余宽度:其余列按内容收紧,
-                          柱状图铺满剩下的空间 */}
-                      <td className="w-full py-1.5 pr-4 pl-2">
-                        <Spark values={r.spark} />
+                      <td className="py-1.5 pr-4">
+                        <div className="flex justify-end">
+                          <Spark values={r.spark} />
+                        </div>
                       </td>
                     </tr>
                     {trades && trades.length > 0 && (
