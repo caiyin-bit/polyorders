@@ -6,11 +6,8 @@ import {
   SCORE_MIN_POSITIONS,
   TOP_N,
 } from "@/src/config";
-import Dashboard, {
-  type FeedTrade,
-  type Funnel,
-  type LeaderRow,
-} from "../dashboard";
+import Dashboard from "../dashboard";
+import type { FeedTrade, Funnel, LeaderRow } from "@/app/lib/types";
 
 // ISR:数据由每日定时抓取更新,5 分钟缓存足够新鲜;dev 模式不受影响仍实时
 export const revalidate = 300;

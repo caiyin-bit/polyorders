@@ -55,12 +55,15 @@ export function limitRejection(
   spent: number,
   limits: TradeLimits,
 ): string | null {
+  // 判定用精确值,展示一律两位小数:含费金额是乘出来的,直接插进文案会带出
+  // 102.96000000000001 这样的浮点尾巴
+  const usd = (n: number) => `$${n.toFixed(2)}`;
   if (!(amountUsd > 0)) return "下单金额必须大于 0";
   if (amountUsd > limits.maxUsd) {
-    return `超出单笔上限:$${amountUsd} > $${limits.maxUsd}`;
+    return `超出单笔上限:${usd(amountUsd)} > ${usd(limits.maxUsd)}`;
   }
   if (spent + amountUsd > limits.dailyMaxUsd) {
-    return `超出日累计上限:今日已用 $${spent.toFixed(2)},本单 $${amountUsd},上限 $${limits.dailyMaxUsd}`;
+    return `超出日累计上限:今日已用 ${usd(spent)},本单 ${usd(amountUsd)},上限 ${usd(limits.dailyMaxUsd)}`;
   }
   return null;
 }

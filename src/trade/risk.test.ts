@@ -84,6 +84,13 @@ describe("limitRejection:限额判定", () => {
     assert.match(limitRejection(5.01, 0, limits()) ?? "", /超出单笔上限/);
   });
 
+  it("金额一律两位小数,不漏浮点尾巴", () => {
+    // 含费金额是乘出来的,99 * 1.04 = 102.96000000000001
+    const msg = limitRejection(99 * 1.04, 0, limits()) ?? "";
+    assert.match(msg, /\$102\.96 > \$5\.00/);
+    assert.doesNotMatch(msg, /000000/);
+  });
+
   it("日累计恰好用满时放行", () => {
     assert.equal(limitRejection(5, 15, limits()), null);
   });
