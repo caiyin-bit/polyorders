@@ -97,6 +97,11 @@ const HELP = `polyorder —— polyorders 命令行(${DEFAULT_ORIGIN})
   wallet <address>        某地址的评分、持仓与最近成交
   portfolio               我方交易钱包:总权益、现金、持仓与盈亏
   copystats [--days N]    跟单引擎成绩单:shadow 模拟收益、跳过原因、分钱包表现
+  signals [--limit N] [--address A] [--source rtds] [--decision copy|skip]
+                          原始信号流:含引擎裁决、检测延迟与各持有期观测价
+  watchlist               实时关注池与 watcher 状态
+  watch <address>         加入关注池(需 watch 权限)
+  unwatch <address>       移出关注池(需 watch 权限)
   orders [--mine]         下单记录(--mine 只看本 agent 下的单)
   trade --market <M> --outcome yes|no --side buy|sell
         [--amount <USD>] [--shares <N>] [--limit <价格>]
@@ -192,6 +197,39 @@ async function main() {
       });
       const qs = values.days ? `?days=${Number(values.days)}` : "";
       print(await request("GET", `/api/agent/copystats${qs}`));
+      return;
+    }
+
+    case "signals": {
+      const { values } = parseArgs({
+        args: rest,
+        options: {
+          limit: { type: "string" },
+          address: { type: "string" },
+          source: { type: "string" },
+          decision: { type: "string" },
+        },
+      });
+      const qs = new URLSearchParams(
+        Object.entries(values).filter(([, v]) => v !== undefined),
+      ).toString();
+      print(await request("GET", `/api/agent/signals${qs ? `?${qs}` : ""}`));
+      return;
+    }
+
+    case "watchlist":
+      print(await request("GET", "/api/agent/watchlist"));
+      return;
+
+    case "watch":
+    case "unwatch": {
+      const address = rest[0];
+      if (!address) fail(`用法:polyorder ${cmd} <address>`);
+      print(
+        await request(cmd === "watch" ? "POST" : "DELETE", "/api/agent/watchlist", {
+          address,
+        }),
+      );
       return;
     }
 

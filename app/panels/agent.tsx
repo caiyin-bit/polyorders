@@ -135,8 +135,14 @@ export function AgentPanel() {
       ) : (
         <ul className="space-y-2">
           {agents.map((a) => {
-            const canTrade = a.scopes.includes("trade");
             const revoked = a.revoked_at !== null;
+            // 逐项增删,不整体替换——否则勾一个会把另一个权限清掉
+            const toggleScope = (scope: string) =>
+              patch(a.id, {
+                scopes: a.scopes.includes(scope)
+                  ? a.scopes.filter((s) => s !== scope)
+                  : [...a.scopes, scope],
+              });
             return (
               <li
                 key={a.id}
@@ -157,15 +163,22 @@ export function AgentPanel() {
                   <span>
                     活跃 {a.last_seen_at ? fmtTime(a.last_seen_at) : "从未"}
                   </span>
-                  <label className="ml-auto flex items-center gap-1">
+                  <label
+                    className="ml-auto flex items-center gap-1"
+                    title="允许改动实时关注池;它决定跟单引擎盯哪些地址"
+                  >
                     <input
                       type="checkbox"
-                      checked={canTrade}
-                      onChange={() =>
-                        patch(a.id, {
-                          scopes: canTrade ? ["read"] : ["read", "trade"],
-                        })
-                      }
+                      checked={a.scopes.includes("watch")}
+                      onChange={() => toggleScope("watch")}
+                    />
+                    关注池
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input
+                      type="checkbox"
+                      checked={a.scopes.includes("trade")}
+                      onChange={() => toggleScope("trade")}
                     />
                     下单权限
                   </label>

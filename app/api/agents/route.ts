@@ -4,7 +4,8 @@ export const dynamic = "force-dynamic";
 
 // 人类侧的 agent 管理接口,受 middleware 保护(路径不在 api/agent/ 命名空间内)
 
-const ALLOWED_SCOPES = ["read", "trade"];
+// watch 单列一档:改关注池会改变跟单引擎的输入,live 模式下等于间接触发下单
+const ALLOWED_SCOPES = ["read", "trade", "watch"];
 
 export async function GET() {
   const { rows } = await query(

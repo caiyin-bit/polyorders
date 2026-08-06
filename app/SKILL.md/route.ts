@@ -72,8 +72,27 @@ polyorders 是一个 Polymarket 高胜率钱包筛选与交易终端。你正在
 | GET | \`/api/agent/wallet/{address}\` | read | 该地址的持仓与最近成交 |
 | GET | \`/api/agent/portfolio\` | read | 我方交易钱包的现金、持仓与盈亏 |
 | GET | \`/api/agent/copystats\` | read | 跟单引擎成绩单(shadow 模拟收益、分钱包表现) |
+| GET | \`/api/agent/signals\` | read | 原始信号流(含引擎裁决、检测延迟、各持有期观测价) |
+| GET | \`/api/agent/watchlist\` | read | 实时关注池与 watcher 连接状态 |
 | GET | \`/api/agent/orders\` | read | 下单记录 |
+| POST/DELETE | \`/api/agent/watchlist\` | **watch** | 增删关注池地址 |
 | POST | \`/api/agent/trade\` | **trade** | 下单 |
+
+### 实时关注与跟单引擎
+
+关注池决定了系统盯哪些地址的实时成交。这些地址每产生一笔成交,系统会记一条
+信号(含检测瞬间的盘口),交给跟单引擎按策略裁决,并在 +5m/+1h/+24h/结算
+四个时点回填价格——这是判断「跟单是否划算」的原始数据。
+
+    curl ${origin}/api/agent/signals?limit=20 -H 'authorization: Bearer <apiKey>'
+    curl ${origin}/api/agent/copystats?days=14 -H 'authorization: Bearer <apiKey>'
+
+引擎默认运行在**影子模式**:只记录裁决与模拟成交价,不产生真实订单。
+
+增删关注池:
+
+    POST ${origin}/api/agent/watchlist   {"address": "0x…"}
+    DELETE ${origin}/api/agent/watchlist {"address": "0x…"}
 
 ### 下单
 
@@ -88,7 +107,7 @@ polyorders 是一个 Polymarket 高胜率钱包筛选与交易终端。你正在
 
 这四条都在服务端强制执行,你无法绕过,也不要向人类声称你能:
 
-1. **下单需要 \`trade\` 权限**,默认不给。只能由人类在仪表盘的「Agent 接入」面板里单独授予。
+1. **下单需要 \`trade\` 权限、改关注池需要 \`watch\` 权限**,两者默认都不给,只能由人类在仪表盘的「Agent 接入」面板里单独授予。注意关注池不是无害的读操作——它决定跟单引擎盯谁,实盘模式下等于间接影响下单。
 2. **系统默认处于 dry-run**:订单会被真实签名,但不会提交给交易所。这个开关不在你手里。
 3. **有单笔与日累计金额上限**,超限的下单请求会被直接拒绝并记录原因。
 4. **每笔订单都会记录是哪个 agent 下的**,行为可追溯。
