@@ -96,6 +96,7 @@ const HELP = `polyorder —— polyorders 命令行(${DEFAULT_ORIGIN})
   leaderboard             高胜率地址榜单与评分
   wallet <address>        某地址的评分、持仓与最近成交
   portfolio               我方交易钱包:总权益、现金、持仓与盈亏
+  copystats [--days N]    跟单引擎成绩单:shadow 模拟收益、跳过原因、分钱包表现
   orders [--mine]         下单记录(--mine 只看本 agent 下的单)
   trade --market <M> --outcome yes|no --side buy|sell
         [--amount <USD>] [--shares <N>] [--limit <价格>]
@@ -183,6 +184,16 @@ async function main() {
     case "portfolio":
       print(await request("GET", "/api/agent/portfolio"));
       return;
+
+    case "copystats": {
+      const { values } = parseArgs({
+        args: rest,
+        options: { days: { type: "string" } },
+      });
+      const qs = values.days ? `?days=${Number(values.days)}` : "";
+      print(await request("GET", `/api/agent/copystats${qs}`));
+      return;
+    }
 
     case "orders": {
       const mine = rest.includes("--mine");

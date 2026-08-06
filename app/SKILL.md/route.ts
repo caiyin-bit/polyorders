@@ -71,6 +71,7 @@ polyorders 是一个 Polymarket 高胜率钱包筛选与交易终端。你正在
 | GET | \`/api/agent/leaderboard\` | read | 入选地址榜单与评分 |
 | GET | \`/api/agent/wallet/{address}\` | read | 该地址的持仓与最近成交 |
 | GET | \`/api/agent/portfolio\` | read | 我方交易钱包的现金、持仓与盈亏 |
+| GET | \`/api/agent/copystats\` | read | 跟单引擎成绩单(shadow 模拟收益、分钱包表现) |
 | GET | \`/api/agent/orders\` | read | 下单记录 |
 | POST | \`/api/agent/trade\` | **trade** | 下单 |
 

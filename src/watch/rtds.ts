@@ -13,6 +13,8 @@ import {
   WATCH_RELOAD_MS,
 } from "../config";
 import { query } from "../db";
+import { maybeCopy } from "../copy/engine";
+import { fetchBookTop, recordSignal } from "../signals";
 import { sendAlert } from "../telegram";
 
 // 可用 RTDS_URL 覆盖,便于测试重连路径
@@ -128,6 +130,37 @@ async function handleTrade(p: TradePayload): Promise<void> {
       `$${usdc.toFixed(2)} — ${p.title?.slice(0, 50) ?? ""}`,
   );
   if (!inserted) return;
+
+  // 信号链路:先抓检测瞬间的盘口(跟单成本的关键证据),落 signals 后交给引擎。
+  // 整条链路不抛错,失败只损失一条信号,不影响 watcher 主流程
+  if (p.transactionHash && p.side) {
+    try {
+      const book = p.asset
+        ? await fetchBookTop(p.asset)
+        : { bestBid: null, bestAsk: null };
+      const signal = await recordSignal(
+        address,
+        {
+          conditionId: p.conditionId,
+          asset: p.asset,
+          side: p.side,
+          outcome: p.outcome,
+          price: p.price,
+          size: p.size,
+          usd: usdc,
+          title: p.title,
+          eventSlug: p.eventSlug,
+          timestamp: p.timestamp ?? Math.floor(Date.now() / 1000),
+          transactionHash: p.transactionHash,
+        },
+        "rtds",
+        book,
+      );
+      if (signal) await maybeCopy(signal, address);
+    } catch (err) {
+      console.error(`watcher: 信号处理失败 ${String(err)}`);
+    }
+  }
 
   // 只在真正插入后推送,避免重复;再按地址冷却,避免连续成交刷屏
   if (usdc < WATCH_ALERT_MIN_USD) return;

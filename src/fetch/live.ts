@@ -1,11 +1,13 @@
 import {
   DATA_API,
   TOP_N,
+  TRACKED_TRADES_RETENTION_DAYS,
   TRADES_KEEP_PER_ADDRESS,
   TRADES_RETENTION_DAYS,
 } from "../config";
 import { query, withTransaction } from "../db";
 import { createLimiter, fetchJson } from "../http";
+import { recordSignalsBatch } from "../signals";
 
 type ApiOpenPosition = {
   conditionId: string;
@@ -98,6 +100,7 @@ async function replaceOpenPositions(address: string, items: ApiOpenPosition[]) {
 async function fetchNewTrades(
   limiter: ReturnType<typeof createLimiter>,
   address: string,
+  source: "watch" | "live",
 ): Promise<number> {
   const { rows } = await query<{ since: number | null }>(
     'SELECT MAX("timestamp") AS since FROM trades WHERE address = $1',
@@ -149,6 +152,25 @@ async function fetchNewTrades(
         values,
       );
       inserted += res.rowCount ?? 0;
+      // 同批落一份信号(补 RTDS 覆盖不到的地址);signals 自己去重,
+      // RTDS 已经记过的这里会静默跳过
+      await recordSignalsBatch(
+        address,
+        rowsToInsert.map((t) => ({
+          conditionId: t.conditionId,
+          asset: t.asset,
+          side: t.side,
+          outcome: t.outcome,
+          price: t.price,
+          size: t.size,
+          usd: t.usdcSize ?? (t.price ?? 0) * (t.size ?? 0),
+          title: t.title,
+          eventSlug: t.eventSlug,
+          timestamp: t.timestamp,
+          transactionHash: t.transactionHash,
+        })),
+        source,
+      );
     }
     // 已翻到 since 之前或最后一页,增量完成
     if (fresh.length < page.length || page.length < PAGE_SIZE) break;
@@ -162,9 +184,16 @@ async function fetchNewTrades(
  * trades."timestamp" 为秒(API 原始值)。
  */
 async function pruneOldTrades(): Promise<number> {
-  const cutoff = Math.floor(Date.now() / 1000) - TRADES_RETENTION_DAYS * 86400;
+  const nowS = Math.floor(Date.now() / 1000);
+  const cutoff = nowS - TRADES_RETENTION_DAYS * 86400;
+  // 被跟踪地址(Top N + 关注池)是回测的原始佐证,保留期更长
+  const trackedCutoff = nowS - TRACKED_TRADES_RETENTION_DAYS * 86400;
   const res = await query(
-    `WITH keep AS (
+    `WITH tracked AS (
+       SELECT address FROM scores WHERE rank IS NOT NULL AND rank <= $3
+       UNION
+       SELECT address FROM watchlist
+     ), keep AS (
        SELECT id FROM (
          SELECT id, row_number() OVER (
            PARTITION BY address ORDER BY "timestamp" DESC
@@ -173,16 +202,20 @@ async function pruneOldTrades(): Promise<number> {
        ) ranked
        WHERE rn <= $2
      )
-     DELETE FROM trades
-     WHERE "timestamp" < $1 AND id NOT IN (SELECT id FROM keep)`,
-    [cutoff, TRADES_KEEP_PER_ADDRESS],
+     DELETE FROM trades t
+     WHERE t.id NOT IN (SELECT id FROM keep)
+       AND t."timestamp" < CASE
+         WHEN t.address IN (SELECT address FROM tracked) THEN $4
+         ELSE $1
+       END`,
+    [cutoff, TRADES_KEEP_PER_ADDRESS, TOP_N, trackedCutoff],
   );
   return res.rowCount ?? 0;
 }
 
 /** 对给定地址各拉一轮:持仓快照整体替换 + 成交增量(live 与 watch 共用) */
 async function fetchAddresses(
-  tag: string,
+  tag: "watch" | "live",
   addresses: string[],
 ): Promise<{ ok: number; failed: number }> {
   const limiter = createLimiter(3, 250);
@@ -194,7 +227,7 @@ async function fetchAddresses(
       try {
         const positions = await fetchOpenPositions(limiter, address);
         await replaceOpenPositions(address, positions);
-        const newTrades = await fetchNewTrades(limiter, address);
+        const newTrades = await fetchNewTrades(limiter, address, tag);
         ok++;
         console.log(
           `${tag}: ${address.slice(0, 10)}… open=${positions.length} newTrades=${newTrades}`,

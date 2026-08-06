@@ -18,6 +18,17 @@ export const TOP_N = 20;
 // fetchNewTrades 的 MAX(timestamp) 增量游标失效,每轮都重新回填再删。
 export const TRADES_RETENTION_DAYS = 14;
 export const TRADES_KEEP_PER_ADDRESS = 50;
+// 被跟踪地址(Top N + 关注池)的成交延长保留:它们是回测的原始佐证
+export const TRACKED_TRADES_RETENTION_DAYS = 90;
+
+// 信号与观测数据的保留窗口(signals 级联带走 marks 与 copy_decisions)
+export const SIGNALS_RETENTION_DAYS = 90;
+
+// 跟单引擎:默认 shadow(只记录);live 需 TRADING_ENABLED 与
+// COPY_TRADING_ENABLED 双开关。日预算独立于全局限额且更低,
+// 跟单挤占不了手动下单的额度。
+export const COPY_ORDER_USD = 2;
+export const COPY_DAILY_MAX_USD_DEFAULT = 10;
 
 // 实时关注池:小池子才支撑得起 5 分钟级高频定向拉取
 export const WATCH_POOL_LIMIT = 5;

@@ -5,3 +5,7 @@
 */5 * * * * /app/scripts/run-fetch.sh watch >> /var/log/fetch/watch.log 2>&1
 # 我方订单状态轮询:无待确认订单时秒退,不请求 CLOB
 */5 * * * * cd /app && flock -n /tmp/orders-poll.lock ./node_modules/.bin/tsx scripts/orders-poll.ts >> /var/log/fetch/orders.log 2>&1
+# 信号价格观测:补 +5m/+1h/+24h 历史价与结算终值,顺带清 90 天保留窗
+*/5 * * * * cd /app && flock -n /tmp/signals-mark.lock ./node_modules/.bin/tsx scripts/signals-mark.ts >> /var/log/fetch/signals.log 2>&1
+# 我方权益快照(权益曲线数据源)
+7 * * * * cd /app && ./node_modules/.bin/tsx scripts/equity-snapshot.ts >> /var/log/fetch/equity.log 2>&1
