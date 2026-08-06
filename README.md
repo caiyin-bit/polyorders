@@ -40,7 +40,19 @@ pnpm dev
 | `pnpm db:migrate` | 应用 `db/migrations/` 下未执行的迁移(按序号) |
 | `pnpm fetch` | 运行完整抓取管线(四步) |
 | `tsx src/fetch/index.ts --step=N [--force] [--max=N]` | 单步运行:1 候选 / 2 初筛 / 3 仓位 / 4 评分 |
+| `pnpm wallet:doctor` | 交易钱包体检:地址、pUSD 余额、授权、风控配置 |
+| `pnpm wallet:setup` | 一次性交易授权(幂等) |
 | `pnpm typecheck` | TypeScript 检查 |
+
+## 交易(Polymarket CLOB V2)
+
+仪表盘左栏「手动下单」面板可对任意市场下单,市场支持 slug / 页面链接 / conditionId 三种写法。
+
+- **默认 dry-run**:`TRADING_ENABLED` 必须显式等于 `true` 才会真正提交。dry-run 会真实签名订单(从而校验 tokenId、价格精度与费用)但不发给 CLOB,记录进 `orders` 表供逐字段核对
+- **双重限额**:`TRADE_MAX_USD` 单笔、`TRADE_DAILY_MAX_USD` 日累计(按北京时间自然日),留空则用 `src/config.ts` 中的保守默认值;市价买单额外用 SDK 的 `maxSpend` 卡住含手续费的总支出
+- **上手顺序**:配好 `.env` 中的 `POLYMARKET_PRIVATE_KEY` → `pnpm wallet:doctor` 确认资金主体钱包与余额 → `pnpm wallet:setup` 完成授权 → 面板发一笔 dry-run 核对 → 再开 `TRADING_ENABLED`
+- 资金主体默认是私钥派生的 **Deposit Wallet**,与在官网充值的钱包很可能不是同一个;doctor 会把地址打出来。要沿用官网账户,把 `POLYMARKET_WALLET_ADDRESS` 设为该钱包地址
+- 抵押品是 **pUSD**(非 USDC.e),CLOB V2 自 2026-04-28 起生效,V1 SDK 与 V1 签名订单已失效
 
 ## 数据说明
 

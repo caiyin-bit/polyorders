@@ -1,6 +1,7 @@
 {
   "name": "polyorders",
   "private": true,
+  "type": "module",
   "version": "0.1.0",
   "packageManager": "pnpm@11.7.0",
   "scripts": {
@@ -9,14 +10,18 @@
     "start": "next start",
     "fetch": "tsx src/fetch/index.ts",
     "db:migrate": "tsx scripts/migrate.ts",
+    "wallet:doctor": "tsx scripts/wallet-doctor.ts",
+    "wallet:setup": "tsx scripts/wallet-setup.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@polymarket/client": "^0.3.0",
     "jose": "^6.2.8",
     "next": "^16.2.12",
     "pg": "^8.22.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "viem": "^2.55.10"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

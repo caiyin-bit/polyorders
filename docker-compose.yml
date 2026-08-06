@@ -16,7 +16,7 @@ services:
       retries: 10
 
   web:
-    image: node:22-alpine
+    image: node:24-alpine
     working_dir: /app
     command: sh -c "corepack enable && pnpm install && pnpm db:migrate && pnpm dev"
     environment:

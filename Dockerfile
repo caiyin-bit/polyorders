@@ -1,6 +1,7 @@
 # 生产镜像:web(next start)与 scheduler(crond 定时抓取)共用同一构建
 # 不用 standalone 输出:RUN 按钮与 scheduler 都需要完整 node_modules(tsx)
-FROM node:22-alpine AS app
+# node 24:@polymarket/client 的 engines 要求 >=24
+FROM node:24-alpine AS app
 RUN apk add --no-cache curl tzdata && corepack enable
 # 全链路(含构建期 ISR 预渲染)使用北京时间
 ENV TZ=Asia/Shanghai
