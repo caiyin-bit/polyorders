@@ -44,6 +44,14 @@ export default function LoginButton({
         window.location.href = next;
         return;
       }
+      // 403 + pending:身份已验证但没权限,服务端已发待审凭证,转去申请门禁码
+      const body = (await res.json().catch(() => null)) as {
+        pending?: boolean;
+      } | null;
+      if (res.status === 403 && body?.pending) {
+        window.location.href = "/access";
+        return;
+      }
       setError(res.status === 403 ? ERRORS.denied : ERRORS.invalid);
       setBusy(false);
     } catch (e) {

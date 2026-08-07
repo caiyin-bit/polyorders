@@ -28,8 +28,13 @@ export async function middleware(req: NextRequest) {
 //
 // 注意 `api/agent/` 的尾斜杠不可省:写成 `api/agent` 会前缀匹配到人类用的
 // `/api/agents`(agent 管理接口),把认领与授权也一并放行掉。
+// access 与 api/access 靠「待审凭证」自行把关(见 app/api/access/route.ts),
+// api/telegram/ 是 Telegram 主动回调,靠 secret 头自证,都不能要求正式会话。
+//
+// 注意 `api/agent/` 与 `api/telegram/` 的尾斜杠不可省:写成 `api/agent`
+// 会前缀匹配到人类用的 `api/agents`,把认领与授权也一并放行掉。
 export const config = {
   matcher: [
-    "/((?!login|api/auth|api/agent/|SKILL\\.md|_next/static|_next/image|icon.svg|apple-icon|favicon.ico).*)",
+    "/((?!login|access|api/auth|api/access|api/agent/|api/telegram/|SKILL\\.md|_next/static|_next/image|icon.svg|apple-icon|favicon.ico).*)",
   ],
 };

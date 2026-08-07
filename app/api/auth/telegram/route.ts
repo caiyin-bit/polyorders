@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import {
+  createPendingToken,
   createSession,
   DISPLAY_COOKIE,
+  PENDING_COOKIE,
+  PENDING_MAX_AGE,
   SESSION_COOKIE,
   SESSION_MAX_AGE,
 } from "@/src/auth";
@@ -31,8 +34,18 @@ export async function POST(req: Request) {
   try {
     await recordLogin(user);
   } catch {
-    console.warn(`auth: 用户 ${user.id} 不在允许名单内`);
-    return NextResponse.json({ error: "denied" }, { status: 403 });
+    // 身份是真的,只是还没权限。发一张待审凭证让他去走门禁码流程,
+    // 而不是直接拒之门外——这张凭证不带任何权限,只用于 /access 页面
+    console.warn(`auth: 用户 ${user.id} 尚无权限,转入门禁码申请`);
+    const res = NextResponse.json({ pending: true }, { status: 403 });
+    res.cookies.set(PENDING_COOKIE, await createPendingToken(user), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: PENDING_MAX_AGE,
+      path: "/",
+    });
+    return res;
   }
 
   const res = NextResponse.json({ ok: true });

@@ -51,6 +51,13 @@ export const SESSION_COOKIE = "po_session";
 export const DISPLAY_COOKIE = "po_user";
 export const SESSION_MAX_AGE = 7 * 86_400;
 
+// 待审凭证:Telegram 验签已过、身份为真,但没有任何权限。
+// 它与正式会话用同一套签名,因此必须靠 typ 区分——否则把 po_pending 的值
+// 塞进 po_session 就能直接进看板。
+export const PENDING_COOKIE = "po_pending";
+export const PENDING_MAX_AGE = 30 * 60;
+const PENDING_TYP = "pending";
+
 function authSecret(): Uint8Array {
   const secret = process.env.AUTH_SECRET ?? process.env.TELEGRAM_BOT_TOKEN;
   if (!secret) throw new Error("AUTH_SECRET 未配置");
@@ -68,23 +75,49 @@ export async function createSession(user: TelegramUser): Promise<string> {
   return `${payload}.${await hmacHex(authSecret(), payload)}`;
 }
 
-export async function verifySession(
-  token: string,
-): Promise<{ id: number; name: string } | null> {
+/** 待审凭证:只证明「这个 Telegram 身份是真的」,不代表任何权限 */
+export async function createPendingToken(user: TelegramUser): Promise<string> {
+  const payload = b64url(
+    JSON.stringify({
+      id: user.id,
+      name: user.username ?? user.first_name ?? String(user.id),
+      typ: PENDING_TYP,
+      exp: Math.floor(Date.now() / 1000) + PENDING_MAX_AGE,
+    }),
+  );
+  return `${payload}.${await hmacHex(authSecret(), payload)}`;
+}
+
+type TokenPayload = { id: number; name: string; exp: number; typ?: string };
+
+async function readToken(token: string): Promise<TokenPayload | null> {
   const dot = token.lastIndexOf(".");
   if (dot < 0) return null;
   const payload = token.slice(0, dot);
   const sig = token.slice(dot + 1);
   if ((await hmacHex(authSecret(), payload)) !== sig) return null;
   try {
-    const data = JSON.parse(fromB64url(payload)) as {
-      id: number;
-      name: string;
-      exp: number;
-    };
+    const data = JSON.parse(fromB64url(payload)) as TokenPayload;
     if (data.exp < Date.now() / 1000) return null;
-    return { id: data.id, name: data.name };
+    return data;
   } catch {
     return null;
   }
+}
+
+export async function verifySession(
+  token: string,
+): Promise<{ id: number; name: string } | null> {
+  const data = await readToken(token);
+  // 待审凭证一律不能当正式会话用;历史 token 没有 typ,视为正式会话
+  if (!data || data.typ === PENDING_TYP) return null;
+  return { id: data.id, name: data.name };
+}
+
+export async function verifyPendingToken(
+  token: string,
+): Promise<{ id: number; name: string } | null> {
+  const data = await readToken(token);
+  if (!data || data.typ !== PENDING_TYP) return null;
+  return { id: data.id, name: data.name };
 }
