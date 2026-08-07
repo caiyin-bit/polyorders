@@ -15,10 +15,20 @@ type UserRow = {
   last_login_at: number | null;
 };
 
+type AccessReq = {
+  id: number;
+  telegram_id: number;
+  username: string | null;
+  code: string | null;
+  code_expires_at: number | null;
+};
+type AccessView = { pending: AccessReq[]; active: AccessReq[] };
+
 export function UsersPanel() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [me, setMe] = useState<{ id: number; role: string } | null>(null);
   const [envAdmins, setEnvAdmins] = useState<string[]>([]);
+  const [access, setAccess] = useState<AccessView | null>(null);
   const [newId, setNewId] = useState("");
   const [newRole, setNewRole] = useState<"viewer" | "admin">("viewer");
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +41,12 @@ export function UsersPanel() {
         users: UserRow[];
         me: { id: number; role: string };
         envAdmins: string[];
+        access: AccessView | null;
       };
       setUsers(data.users ?? []);
       setMe(data.me ?? null);
       setEnvAdmins(data.envAdmins ?? []);
+      setAccess(data.access ?? null);
     } catch {
       /* 面板不可用不影响主看板 */
     }
@@ -53,9 +65,16 @@ export function UsersPanel() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { error?: string; users?: UserRow[] };
+      const data = (await res.json()) as {
+        error?: string;
+        users?: UserRow[];
+        access?: AccessView;
+      };
       if (!res.ok) setError(data.error ?? "操作失败");
-      else if (data.users) setUsers(data.users);
+      else {
+        if (data.users) setUsers(data.users);
+        if (data.access) setAccess(data.access);
+      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -157,6 +176,72 @@ export function UsersPanel() {
           })}
         </ul>
       )}
+
+      {/* 访问申请。门禁码在这里明文可见——它是不依赖 Telegram 的兜底通道,
+          Telegram 那两条(按钮弹窗、独立消息)都是出站调用,会间断超时 */}
+      {isAdmin && (access?.pending.length || access?.active.length) ? (
+        <div className="mt-3 space-y-1.5 border-t border-line pt-3">
+          <h3 className="text-[11px] text-ink2">访问申请</h3>
+          {access?.pending.map((r) => (
+            <div
+              key={r.id}
+              className="flex items-center gap-1.5 rounded border border-line bg-panel2 px-2 py-1.5 text-[11px]"
+            >
+              <span className="min-w-0 truncate">
+                {r.username ?? r.telegram_id}
+              </span>
+              <span className="shrink-0 font-mono text-[10px] text-mut">
+                {r.telegram_id}
+              </span>
+              <span className="ml-auto flex shrink-0 gap-2">
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    mutate("POST", { action: "approve", requestId: r.id })
+                  }
+                  className="text-accent hover:underline disabled:opacity-40"
+                >
+                  批准
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    mutate("POST", { action: "reject", requestId: r.id })
+                  }
+                  className="text-bad-ink hover:underline disabled:opacity-40"
+                >
+                  拒绝
+                </button>
+              </span>
+            </div>
+          ))}
+          {access?.active.map((r) => (
+            <div
+              key={r.id}
+              className="rounded border border-accent/40 bg-accent/10 px-2 py-1.5 text-[11px]"
+            >
+              <div className="flex items-baseline gap-1.5">
+                <span className="min-w-0 truncate text-mut">
+                  {r.username ?? r.telegram_id} 的门禁码
+                </span>
+                <span className="ml-auto shrink-0 text-[10px] text-mut">
+                  {Math.max(
+                    0,
+                    Math.round(((r.code_expires_at ?? 0) - Date.now()) / 60_000),
+                  )}{" "}
+                  分钟后过期
+                </span>
+              </div>
+              <div
+                className="mt-0.5 cursor-pointer select-all font-mono text-base tracking-[0.2em] text-accent"
+                title="点击选中后复制,转交给申请人"
+              >
+                {r.code}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {isAdmin && (
         <div className="mt-3 space-y-1.5 border-t border-line pt-3">

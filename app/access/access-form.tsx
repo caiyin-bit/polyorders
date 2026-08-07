@@ -28,8 +28,12 @@ export default function AccessForm() {
     }
   }, []);
 
+  // 待审期间轮询:管理员在 Telegram 上批准后,这一页要自己切换到输码框,
+  // 否则申请人对着「等待审批」干等,不知道该刷新
   useEffect(() => {
     load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
   }, [load]);
 
   async function act(action: "request" | "verify") {

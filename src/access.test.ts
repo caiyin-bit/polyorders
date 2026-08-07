@@ -5,7 +5,7 @@ import {
   canVerify,
   CODE_TTL_MS,
   generateCode,
-  hashCode,
+  normalizeCode,
   MAX_ATTEMPTS,
   parseCallback,
   REJECT_COOLDOWN_MS,
@@ -31,21 +31,17 @@ describe("generateCode:门禁码生成", () => {
   });
 });
 
-describe("hashCode:门禁码哈希", () => {
-  it("大小写与空格不敏感——用户手抄难免带空格", async () => {
-    const a = await hashCode("ABCD2345");
-    assert.equal(await hashCode(" abcd2345 "), a);
-    assert.equal(await hashCode("AbCd2345"), a);
+describe("normalizeCode:输入规整化", () => {
+  // 门禁码靠口头或文字转述,用户手抄难免带空格、大小写不一
+  it("大小写与空格不敏感", () => {
+    assert.equal(normalizeCode(" abcd2345 "), "ABCD2345");
+    assert.equal(normalizeCode("AbCd2345"), "ABCD2345");
+    assert.equal(normalizeCode("ABCD 2345"), "ABCD2345");
+    assert.equal(normalizeCode("AB CD 23 45"), "ABCD2345");
   });
 
-  it("不同码哈希不同", async () => {
-    assert.notEqual(await hashCode("ABCD2345"), await hashCode("ABCD2346"));
-  });
-
-  it("输出是 64 位十六进制,不含明文", async () => {
-    const h = await hashCode("ABCD2345");
-    assert.match(h, /^[0-9a-f]{64}$/);
-    assert.ok(!h.includes("ABCD"));
+  it("不同的码规整后仍然不同", () => {
+    assert.notEqual(normalizeCode("ABCD2345"), normalizeCode("ABCD2346"));
   });
 });
 

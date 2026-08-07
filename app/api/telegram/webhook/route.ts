@@ -1,4 +1,5 @@
 import { approve, parseCallback, reject } from "@/src/access";
+import { sendAlert } from "@/src/telegram";
 import { envAllowedIds, roleOf } from "@/src/users";
 
 export const dynamic = "force-dynamic";
@@ -19,18 +20,28 @@ type Callback = {
   message?: { chat?: { id?: number } };
 };
 
-async function answer(callbackId: string, text: string): Promise<void> {
+/** 返回是否送达:门禁码要靠多条通道兜底,调用方需要知道这条通没通 */
+async function answer(callbackId: string, text: string): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) return;
+  if (!token) return false;
   try {
-    await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ callback_query_id: callbackId, text, show_alert: true }),
-      signal: AbortSignal.timeout(10_000),
-    });
+    const res = await fetch(
+      `https://api.telegram.org/bot${token}/answerCallbackQuery`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          callback_query_id: callbackId,
+          text,
+          show_alert: true,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    return res.ok;
   } catch (err) {
     console.error(`webhook: 回执失败 ${String(err)}`);
+    return false;
   }
 }
 
@@ -79,8 +90,19 @@ export async function POST(req: Request) {
     await answer(cb.id, "该申请已被处理过");
     return Response.json({ ok: true });
   }
-  // 门禁码只在这一刻可见(库里只存哈希),所以用 alert 弹窗给管理员,
-  // 便于复制转交;30 分钟内有效
-  await answer(cb.id, `已批准。门禁码:${code}\n30 分钟内有效,请转交对方。`);
+
+  // 三条独立通道送达门禁码,任何一条通就行:
+  //   1) 按钮弹窗——最快,但受出站超时影响
+  //   2) 单独消息——同样受影响,但与 1 是两次独立请求,同时挂掉的概率低得多
+  //   3) 网页「用户与权限」面板——不依赖 Telegram,一定拿得到
+  // 码已明文入库,所以这里失败也不会像之前那样永久丢失。
+  const text = `🔑 门禁码:${code}\n30 分钟内有效,请转交给申请人。\n(也可在网站「用户与权限」面板查看)`;
+  const [popup, message] = await Promise.all([
+    answer(cb.id, `已批准。门禁码:${code}\n30 分钟内有效。`),
+    sendAlert(text),
+  ]);
+  if (!popup && !message) {
+    console.error(`webhook: 门禁码两条通道均未送达,申请 ${parsed.id},请到面板查看`);
+  }
   return Response.json({ ok: true });
 }

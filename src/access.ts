@@ -26,7 +26,7 @@ export type AccessRequest = {
   username: string | null;
   first_name: string | null;
   status: AccessStatus;
-  code_hash: string | null;
+  code: string | null;
   code_expires_at: number | null;
   attempts: number;
   requested_at: number;
@@ -39,12 +39,9 @@ export function generateCode(): string {
   return [...buf].map((b) => ALPHABET[b % ALPHABET.length]).join("");
 }
 
-export async function hashCode(code: string): Promise<string> {
-  const data = new TextEncoder().encode(code.trim().toUpperCase());
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  return [...new Uint8Array(buf)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+/** 规整化:用户手抄难免带空格或小写 */
+export function normalizeCode(code: string): string {
+  return code.trim().toUpperCase().replace(/\s+/g, "");
 }
 
 /**
@@ -145,15 +142,43 @@ export async function notifyAdmin(req: AccessRequest): Promise<boolean> {
   );
 }
 
-/** 批准并生成门禁码;返回明文码,仅此一次可见 */
+/**
+ * 管理员视角:待审申请与仍然有效的门禁码。
+ *
+ * 这是门禁码的第三条交付通道,也是唯一不依赖 Telegram 的一条。
+ * 前两条(按钮弹窗、单独消息)都是出站调用,实测有约 17% 的间断超时;
+ * 网页这条一定在,管理员打开面板就能拿到码。
+ */
+export async function adminView(): Promise<{
+  pending: AccessRequest[];
+  active: AccessRequest[];
+}> {
+  // 顺手清理过期码,不留没必要的明文残留
+  await query(
+    `UPDATE access_requests SET code = NULL, status = 'expired'
+     WHERE status = 'approved' AND code_expires_at <= $1`,
+    [Date.now()],
+  );
+  const { rows } = await query<AccessRequest>(
+    `SELECT * FROM access_requests
+     WHERE status IN ('pending', 'approved')
+     ORDER BY requested_at DESC`,
+  );
+  return {
+    pending: rows.filter((r) => r.status === "pending"),
+    active: rows.filter((r) => r.status === "approved"),
+  };
+}
+
+/** 批准并生成门禁码;明文入库,可随时在面板上查看 */
 export async function approve(id: number, by: number): Promise<string | null> {
   const code = generateCode();
   const { rowCount } = await query(
     `UPDATE access_requests
-     SET status = 'approved', code_hash = $2, code_expires_at = $3,
+     SET status = 'approved', code = $2, code_expires_at = $3,
          attempts = 0, decided_at = $4, decided_by = $5
      WHERE id = $1 AND status IN ('pending', 'approved')`,
-    [id, await hashCode(code), Date.now() + CODE_TTL_MS, Date.now(), by],
+    [id, code, Date.now() + CODE_TTL_MS, Date.now(), by],
   );
   return rowCount ? code : null;
 }
@@ -161,7 +186,7 @@ export async function approve(id: number, by: number): Promise<string | null> {
 export async function reject(id: number, by: number): Promise<boolean> {
   const { rowCount } = await query(
     `UPDATE access_requests
-     SET status = 'rejected', code_hash = NULL, decided_at = $2, decided_by = $3
+     SET status = 'rejected', code = NULL, decided_at = $2, decided_by = $3
      WHERE id = $1 AND status = 'pending'`,
     [id, Date.now(), by],
   );
@@ -177,7 +202,7 @@ export async function redeem(
   const blocked = canVerify(req, Date.now());
   if (blocked) return { ok: false, error: blocked };
 
-  if (req!.code_hash !== (await hashCode(code))) {
+  if (!req!.code || req!.code !== normalizeCode(code)) {
     await query(
       "UPDATE access_requests SET attempts = attempts + 1 WHERE id = $1",
       [req!.id],
@@ -194,8 +219,9 @@ export async function redeem(
     role: "viewer",
     invitedBy: req!.telegram_id,
   });
+  // 用完立刻清掉明文,不留没必要的残留
   await query(
-    "UPDATE access_requests SET status = 'used', used_at = $2 WHERE id = $1",
+    "UPDATE access_requests SET status = 'used', used_at = $2, code = NULL WHERE id = $1",
     [req!.id, Date.now()],
   );
   return { ok: true };
