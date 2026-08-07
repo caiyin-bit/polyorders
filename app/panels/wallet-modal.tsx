@@ -383,6 +383,26 @@ export function WalletModal({
             ))}
           </div>
 
+          {analysis && analysisHidden && (
+            <button
+              onClick={() => setAnalysisHidden(false)}
+              className="mt-4 flex w-full items-center justify-between rounded border border-accent/30 bg-panel2 px-4 py-2 text-xs text-mut hover:border-accent/60 hover:text-ink2"
+            >
+              <span className="font-medium tracking-wide text-accent">
+                AI 检视报告
+                {analysis.status === "done" && analysis.finishedAt && (
+                  <span
+                    className="ml-2 font-mono font-normal text-mut"
+                    suppressHydrationWarning
+                  >
+                    {fmtAgo(analysis.finishedAt)}
+                  </span>
+                )}
+              </span>
+              <span>展开 ▾</span>
+            </button>
+          )}
+
           {analysis && !analysisHidden && (
             <div className="mt-4 shrink-0 rounded border border-accent/30 bg-panel2 px-4 py-3">
               <div className="mb-2 flex items-center justify-between">
