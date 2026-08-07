@@ -116,10 +116,7 @@ function RatingCell({ item }: { item: RatingItem | undefined }) {
         {item.rating}
       </span>
       {item.reason && (
-        <div
-          title={item.reason}
-          className="mt-0.5 max-w-44 truncate text-[10px] leading-tight text-mut"
-        >
+        <div className="mt-0.5 max-w-56 whitespace-normal break-words text-[10px] leading-snug text-mut">
           {item.reason}
         </div>
       )}
