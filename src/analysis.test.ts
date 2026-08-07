@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   ANALYST_SYSTEM,
   buildAnalysisPrompt,
+  extractRating,
   type AnalysisInput,
 } from "./analysis";
 
@@ -145,5 +146,53 @@ describe("buildAnalysisPrompt:钱包检视提示词", () => {
     for (const kw of ["不得出现", "具体数字", "幸存者偏差", "纯文本"]) {
       assert.ok(ANALYST_SYSTEM.includes(kw), `缺少:${kw}`);
     }
+  });
+});
+
+describe("extractRating:报告尾行评级解析", () => {
+  const report = "一、画像\n- 要点\n\n结论\n整体判断……";
+
+  it("标准尾行:提取评级与理由,正文剥离机器行", () => {
+    const r = extractRating(`${report}\n评级:回避|理由:价差太薄跟单无利可图`);
+    assert.equal(r?.rating, "回避");
+    assert.equal(r?.reason, "价差太薄跟单无利可图");
+    assert.equal(r?.content, report);
+  });
+
+  it("容忍全角冒号与竖线、尾部多余空行", () => {
+    const r = extractRating(`${report}\n评级:值得关注|理由:结构健康\n\n`);
+    assert.equal(r?.rating, "值得关注");
+    assert.equal(r?.reason, "结构健康");
+  });
+
+  it("兜底:老报告只有结论里的【评级】写法", () => {
+    const r = extractRating("……跟单评级【观望】:近期回撤未见底。");
+    assert.equal(r?.rating, "观望");
+    assert.ok(r?.reason.includes("近期回撤"));
+  });
+
+  it("宽松兜底:评级揉进结论段、分隔符不规范(线上真实案例)", () => {
+    // 案例一:「评级:观望。理由:…」句号分隔且不换行
+    const r1 = extractRating(
+      "结论\n……在$10日预算下不具备可复制性。评级:观望。理由:高频撒网型交易,跟单延迟难以复制其边缘优势。",
+    );
+    assert.equal(r1?.rating, "观望");
+    assert.ok(r1?.reason.startsWith("高频撒网型交易"));
+    // 案例二:「评级:回避——…」破折号带理由
+    const r2 = extractRating(
+      "结论\n……数据窗口有限。评级:回避——他在 0.98-1.00 价位吃最后 2% 价差,跟单者没有肉可吃。",
+    );
+    assert.equal(r2?.rating, "回避");
+    assert.ok(r2?.reason.includes("价差"));
+  });
+
+  it("四档之外的词不认;完全没有评级返回 null", () => {
+    assert.equal(extractRating(`${report}\n评级:强烈推荐|理由:x`), null);
+    assert.equal(extractRating(report), null);
+  });
+
+  it("理由超长截断到 60 字,防御模型不守 40 字约定", () => {
+    const r = extractRating(`${report}\n评级:观望|理由:${"长".repeat(100)}`);
+    assert.equal(r?.reason.length, 60);
   });
 });

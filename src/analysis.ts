@@ -189,5 +189,65 @@ ${section("【最近已平仓】(平仓日期 | 市场 | 方向 | 均价 | 盈�
 五、跟单适配性 —— 以本系统「单笔 $${COPY_ORDER_USD}、有延迟、只能吃到他之后的价格」为前提:他的优势是否可复制(靠信息与判断,还是靠速度与大资金);其常用价位区间上跟单是否还有期望收益;成交频率是否适合跟。
 六、风险与红旗 —— 幸存者偏差在此例的具体体现、疑似对敲或刷量的痕迹、数据窗口造成的盲区、其他异常信号。
 
-最后以「结论」小节收尾:3-5 句话总体判断,并从【强烈关注/值得关注/观望/回避】中给出一档跟单参考评级,附一句话理由。`;
+最后以「结论」小节收尾:3-5 句话总体判断,并从【强烈关注/值得关注/观望/回避】中给出一档跟单参考评级,附一句话理由。
+报告的最后一行必须是如下固定格式(供系统解析):单独成行、以「评级:」开头、用半角竖线分隔、理由不超过 40 字;「评级:」字样不要出现在结论正文里:
+评级:观望|理由:此处为一句话理由`;
+}
+
+/* ---------- 评级解析:列表页每行展示的结构化字段来自这里 ---------- */
+
+export const RATINGS = ["强烈关注", "值得关注", "观望", "回避"] as const;
+export type Rating = (typeof RATINGS)[number];
+
+export type ExtractedRating = {
+  rating: Rating;
+  reason: string;
+  /** 剥掉机器行后的正文:弹窗展示用,避免结论与固定行重复 */
+  content: string;
+};
+
+// 模型偶尔用全角冒号/竖线,一并容忍;理由截断到 60 字防御性兜底
+const RATING_LINE =
+  /^评级[::]\s*(强烈关注|值得关注|观望|回避)\s*[||]\s*理由[::]\s*(.+)$/;
+
+export function extractRating(content: string): ExtractedRating | null {
+  const lines = content.split("\n");
+  // 从末尾找:固定行约定在最后,但模型可能在其后再拖一两行空白或客套话
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = lines[i].trim().match(RATING_LINE);
+    if (m) {
+      return {
+        rating: m[1] as Rating,
+        reason: m[2].trim().slice(0, 60),
+        content: [...lines.slice(0, i), ...lines.slice(i + 1)]
+          .join("\n")
+          .trimEnd(),
+      };
+    }
+  }
+  // 兜底一:老格式只在结论里写【评级】,取其后同一行的文字当理由
+  const m2 = content.match(/【(强烈关注|值得关注|观望|回避)】[::]?\s*([^\n]*)/);
+  if (m2) {
+    return {
+      rating: m2[1] as Rating,
+      reason: m2[2].trim().slice(0, 60),
+      content,
+    };
+  }
+  // 兜底二:实测模型会把评级揉进结论段末尾,分隔符五花八门
+  // (「评级:观望。理由:…」「评级:回避——…」)。取最后一处,
+  // 其后同行文字剥掉分隔符与可选的「理由:」前缀即为理由
+  const loose = [
+    ...content.matchAll(
+      /评级[::]\s*(强烈关注|值得关注|观望|回避)[。.,,::——\-||\s]*(?:理由[::]\s*)?([^\n]*)/g,
+    ),
+  ].at(-1);
+  if (loose) {
+    return {
+      rating: loose[1] as Rating,
+      reason: loose[2].trim().slice(0, 60),
+      content,
+    };
+  }
+  return null;
 }

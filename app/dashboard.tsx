@@ -82,6 +82,51 @@ function SortButton({
   );
 }
 
+/* ---------- AI 评级(「列表分析」的产出) ---------- */
+
+type RatingItem = {
+  address: string;
+  status: string | null;
+  rating: string | null;
+  reason: string | null;
+  finishedAt: number | null;
+};
+
+const RATING_STYLE: Record<string, string> = {
+  强烈关注: "bg-up/15 text-up-ink",
+  值得关注: "bg-accent/10 text-accent",
+  观望: "bg-panel2 text-ink2",
+  回避: "bg-down/15 text-down-ink",
+};
+
+function RatingCell({ item }: { item: RatingItem | undefined }) {
+  if (!item || item.status === null)
+    return <span className="text-mut">-</span>;
+  if (item.status === "running")
+    return <span className="text-mut">分析中…</span>;
+  if (item.status === "error" || !item.rating)
+    return <span className="text-down-ink">失败</span>;
+  return (
+    <div className="min-w-0">
+      <span
+        className={`rounded px-1.5 py-px text-[10px] font-semibold ${
+          RATING_STYLE[item.rating] ?? "bg-panel2 text-ink2"
+        }`}
+      >
+        {item.rating}
+      </span>
+      {item.reason && (
+        <div
+          title={item.reason}
+          className="mt-0.5 max-w-44 truncate text-[10px] leading-tight text-mut"
+        >
+          {item.reason}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard({
   rows,
   funnel,
@@ -105,6 +150,52 @@ export default function Dashboard({
   const [watchLimit, setWatchLimit] = useState(5);
   const [watchError, setWatchError] = useState<string | null>(null);
   const [watcher, setWatcher] = useState<WatcherState | null>(null);
+  const [ratings, setRatings] = useState<Map<string, RatingItem>>(new Map());
+  const [batchMsg, setBatchMsg] = useState<string | null>(null);
+
+  const loadRatings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/leaderboard/analyze");
+      const data = (await res.json()) as { items: RatingItem[] };
+      setRatings(new Map(data.items.map((i) => [i.address.toLowerCase(), i])));
+    } catch {
+      /* 评级不可用不影响主看板 */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRatings();
+  }, [loadRatings]);
+
+  const analyzingCount = useMemo(
+    () => [...ratings.values()].filter((i) => i.status === "running").length,
+    [ratings],
+  );
+
+  // 批量分析进行中才轮询;全部完结后这个 effect 自然停摆
+  useEffect(() => {
+    if (analyzingCount === 0) return;
+    const t = setInterval(loadRatings, 4000);
+    return () => clearInterval(t);
+  }, [analyzingCount, loadRatings]);
+
+  async function analyzeAll() {
+    setBatchMsg(null);
+    try {
+      const res = await fetch("/api/leaderboard/analyze", { method: "POST" });
+      const d = (await res.json()) as {
+        queued?: number;
+        skipped?: number;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
+      if (d.queued === 0) setBatchMsg("全部地址都有近期报告,未重新分析");
+      else if (d.skipped) setBatchMsg(`${d.queued} 个开始分析,${d.skipped} 个有近期报告已跳过`);
+      await loadRatings();
+    } catch (err) {
+      setBatchMsg(err instanceof Error ? err.message : "发起失败");
+    }
+  }
 
   const loadWatch = useCallback(async () => {
     try {
@@ -271,6 +362,15 @@ export default function Dashboard({
             {/* 不写死颜色名:配色可切换,文案会跟着说谎 */}
             前 {config.topN} 名为最终入选(排名高亮)
           </span>
+          <button
+            onClick={analyzeAll}
+            disabled={analyzingCount > 0}
+            title={`对前 ${config.topN} 名逐一生成 AI 检视报告`}
+            className="rounded border border-accent/60 px-2 py-0.5 text-[11px] text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {analyzingCount > 0 ? `分析中 剩 ${analyzingCount} 个…` : "✦ 列表分析"}
+          </button>
+          {batchMsg && <span className="text-[11px] text-mut">{batchMsg}</span>}
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <input
               value={search}
@@ -329,6 +429,7 @@ export default function Dashboard({
                     />
                   </th>
                 ))}
+                <th className="py-2 pr-3 font-normal">AI 评级</th>
                 {/* 该列的柱状图是居中的,表头跟着居中才对得上 */}
                 <th className="py-2 text-center font-normal">近 24 笔</th>
               </tr>
@@ -401,6 +502,11 @@ export default function Dashboard({
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
                         {r.score.toFixed(3)}
                       </td>
+                      <td className="py-1.5 pr-3 text-[11px]">
+                        <RatingCell
+                          item={ratings.get(r.address.toLowerCase())}
+                        />
+                      </td>
                       <td
                         rowSpan={hasFeed ? 2 : 1}
                         className="px-4 py-1.5 align-middle"
@@ -415,8 +521,8 @@ export default function Dashboard({
                         onClick={() => openWallet(r.address)}
                         className="cursor-pointer hover:bg-panel2"
                       >
-                        {/* 7 而非 8:最后一列已被上一行的 rowSpan 占用 */}
-                        <td colSpan={7} className="max-w-0 px-4 pb-2.5 pt-0">
+                        {/* 8 而非 9:最后一列已被上一行的 rowSpan 占用 */}
+                        <td colSpan={8} className="max-w-0 px-4 pb-2.5 pt-0">
                           <FeedLines trades={trades} />
                         </td>
                       </tr>
