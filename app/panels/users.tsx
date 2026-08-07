@@ -139,18 +139,19 @@ export function UsersPanel() {
                   {isMe && <span className="shrink-0 text-[10px] text-mut">你</span>}
                   {isAdmin && !fromEnv && !isMe && (
                     <span className="ml-auto flex shrink-0 gap-2">
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          mutate("POST", {
-                            id: u.id,
-                            role: u.role === "admin" ? "viewer" : "admin",
-                          })
-                        }
-                        className="text-mut hover:text-ink2 hover:underline disabled:opacity-40"
-                      >
-                        {u.role === "admin" ? "降为只读" : "设为管理员"}
-                      </button>
+                      {/* 只提供降权,不提供提权:管理员只应有一个人,
+                          列表里一次误点就多一个能下单的账号 */}
+                      {u.role === "admin" && (
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            mutate("POST", { id: u.id, role: "viewer" })
+                          }
+                          className="text-mut hover:text-ink2 hover:underline disabled:opacity-40"
+                        >
+                          降为只读
+                        </button>
+                      )}
                       {u.active && (
                         <button
                           disabled={busy}
