@@ -17,20 +17,64 @@ export const dynamic = "force-dynamic";
 const RECENT_CLOSED_LIMIT = 30;
 const CURVE_POINTS = 30;
 
-// 用 POST 而非 GET:每次调用都真实消耗 LLM 费用,不该被预取或缓存命中
-export async function POST(
+// running 行的判死线:超过它仍未完结,视为进程重启/超时留下的孤儿。
+// 取值要大于 chat 的 timeoutMs(120s)加重试余量,否则会误杀活着的任务
+const STALE_MS = 5 * 60_000;
+
+// 每地址保留的历史条数。只有最新一条会被展示,多留几条仅供排查
+const KEEP_PER_ADDRESS = 5;
+
+type AnalysisRow = {
+  id: number;
+  status: string;
+  content: string | null;
+  model: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  error: string | null;
+  started_at: number;
+  finished_at: number | null;
+};
+
+function toApi(r: AnalysisRow) {
+  const stale = r.status === "running" && Date.now() - r.started_at > STALE_MS;
+  return {
+    status: stale ? "error" : r.status,
+    content: r.content,
+    model: r.model,
+    usage: {
+      promptTokens: r.prompt_tokens ?? 0,
+      completionTokens: r.completion_tokens ?? 0,
+    },
+    error: stale ? "分析中断(服务可能重启过),请重新分析" : r.error,
+    startedAt: r.started_at,
+    finishedAt: r.finished_at,
+  };
+}
+
+async function latestRow(address: string): Promise<AnalysisRow | null> {
+  const { rows } = await query<AnalysisRow>(
+    `SELECT id, status, content, model, prompt_tokens, completion_tokens,
+            error, started_at, finished_at
+     FROM wallet_analyses WHERE address = $1
+     ORDER BY started_at DESC LIMIT 1`,
+    [address],
+  );
+  return rows[0] ?? null;
+}
+
+/** 弹窗打开时恢复状态:最新一条分析,可能是 running/done/error */
+export async function GET(
   _req: Request,
   { params }: { params: Promise<{ address: string }> },
 ) {
-  if (!isLlmConfigured()) {
-    return Response.json(
-      { error: "服务端未配置 DEEPSEEK_API_KEY,分析功能不可用" },
-      { status: 503 },
-    );
-  }
   const { address } = await params;
-  const cutoff30d = Math.floor(Date.now() / 1000) - 30 * 86400;
+  const row = await latestRow(address);
+  return Response.json({ analysis: row ? toApi(row) : null });
+}
 
+async function gatherInput(address: string): Promise<AnalysisInput> {
+  const cutoff30d = Math.floor(Date.now() / 1000) - 30 * 86400;
   const [snapshot, candRes, aggRes, winsRes, lossesRes, recentRes, curveRes] =
     await Promise.all([
       walletSnapshot(address),
@@ -87,12 +131,8 @@ export async function POST(
     (acc += p.realized_pnl),
   ]);
   const step = Math.max(1, Math.ceil(series.length / CURVE_POINTS));
-  const curve = series.filter(
-    (_, i) => i % step === 0 || i === series.length - 1,
-  );
-
   const agg = aggRes.rows[0];
-  const input: AnalysisInput = {
+  return {
     address,
     username: candRes.rows[0]?.username ?? null,
     now: new Date().toISOString(),
@@ -110,10 +150,15 @@ export async function POST(
       topLosses: lossesRes.rows,
       recent: recentRes.rows,
     },
-    curve,
+    curve: series.filter((_, i) => i % step === 0 || i === series.length - 1),
   };
+}
 
+// 后台执行体。web 容器是常驻 next start 进程,fire-and-forget 的 Promise
+// 不会被回收;进程若真在中途死掉,靠读侧的 STALE_MS 判定兜底
+async function runAnalysis(id: number, address: string): Promise<void> {
   try {
+    const input = await gatherInput(address);
     const r = await chat(
       [
         { role: "system", content: ANALYST_SYSTEM },
@@ -130,17 +175,71 @@ export async function POST(
         reasoning: "low",
       },
     );
-    return Response.json({
-      content: r.content,
-      model: r.model,
-      usage: r.usage,
-      generatedAt: Date.now(),
-    });
+    await query(
+      `UPDATE wallet_analyses
+       SET status = 'done', content = $2, model = $3,
+           prompt_tokens = $4, completion_tokens = $5, finished_at = $6
+       WHERE id = $1`,
+      [
+        id,
+        r.content,
+        r.model,
+        r.usage.promptTokens,
+        r.usage.completionTokens,
+        Date.now(),
+      ],
+    );
   } catch (err) {
     console.error(`钱包分析失败 ${address}: ${String(err)}`);
+    await query(
+      `UPDATE wallet_analyses
+       SET status = 'error', error = $2, finished_at = $3
+       WHERE id = $1`,
+      [id, String(err).slice(0, 500), Date.now()],
+    ).catch(() => {});
+  }
+}
+
+/** 发起分析:登记任务立即返回,前端轮询 GET 取结果。POST 语义:每次都花钱 */
+export async function POST(
+  _req: Request,
+  { params }: { params: Promise<{ address: string }> },
+) {
+  if (!isLlmConfigured()) {
     return Response.json(
-      { error: "LLM 调用失败,请稍后重试" },
-      { status: 502 },
+      { error: "服务端未配置 DEEPSEEK_API_KEY,分析功能不可用" },
+      { status: 503 },
     );
   }
+  const { address } = await params;
+
+  // 已有活着的 running 任务就复用:双击/多标签页不该产生两笔 LLM 开销
+  const existing = await latestRow(address);
+  if (
+    existing?.status === "running" &&
+    Date.now() - existing.started_at <= STALE_MS
+  ) {
+    return Response.json({ analysis: toApi(existing) });
+  }
+
+  const startedAt = Date.now();
+  const ins = await query<{ id: number }>(
+    `INSERT INTO wallet_analyses (address, status, started_at)
+     VALUES ($1, 'running', $2) RETURNING id`,
+    [address, startedAt],
+  );
+  const id = ins.rows[0].id;
+
+  // 顺手修剪历史,免得反复分析的地址无限累积
+  await query(
+    `DELETE FROM wallet_analyses WHERE address = $1 AND id NOT IN (
+       SELECT id FROM wallet_analyses WHERE address = $1
+       ORDER BY started_at DESC LIMIT ${KEEP_PER_ADDRESS}
+     )`,
+    [address],
+  );
+
+  void runAnalysis(id, address);
+  const row = await latestRow(address);
+  return Response.json({ analysis: row ? toApi(row) : null });
 }

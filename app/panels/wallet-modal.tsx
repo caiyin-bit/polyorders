@@ -1,7 +1,7 @@
 "use client";
 
 import { Pnl } from "@/app/components/bits";
-import { fmtPct, fmtTime, fmtUsd, shortAddr } from "@/app/lib/format";
+import { fmtAgo, fmtPct, fmtTime, fmtUsd, shortAddr } from "@/app/lib/format";
 import { type TradeLine } from "@/app/lib/types";
 import { FeedLines } from "@/app/panels/feed";
 import { WatchStar } from "@/app/panels/watch";
@@ -18,6 +18,16 @@ type OpenPositionRow = {
   cash_pnl: number | null;
   title: string | null;
   event_slug: string | null;
+};
+
+type WalletAnalysis = {
+  status: "running" | "done" | "error";
+  content: string | null;
+  model: string | null;
+  usage: { promptTokens: number; completionTokens: number };
+  error: string | null;
+  startedAt: number;
+  finishedAt: number | null;
 };
 
 type WalletDetail = {
@@ -173,29 +183,60 @@ export function WalletModal({
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [copied, setCopied] = useState(false);
-  const [analysis, setAnalysis] = useState<{
-    content: string;
-    model: string;
-    usage: { promptTokens: number; completionTokens: number };
-  } | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisErr, setAnalysisErr] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<WalletAnalysis | null>(null);
+  const [analysisHidden, setAnalysisHidden] = useState(false);
+
+  // 任务状态活在服务端:打开弹窗即恢复该地址的历史报告或进行中的分析,
+  // 中途关掉再打开也不丢
+  useEffect(() => {
+    let cancelled = false;
+    setAnalysis(null);
+    setAnalysisHidden(false);
+    fetch(`/api/wallet/${address}/analyze`)
+      .then((r) => r.json())
+      .then((d: { analysis: WalletAnalysis | null }) => {
+        if (!cancelled) setAnalysis(d.analysis);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
+
+  // 进行中每 3 秒轮询一次,直到状态离开 running
+  useEffect(() => {
+    if (analysis?.status !== "running") return;
+    const t = setInterval(() => {
+      fetch(`/api/wallet/${address}/analyze`)
+        .then((r) => r.json())
+        .then((d: { analysis: WalletAnalysis | null }) => {
+          if (d.analysis) setAnalysis(d.analysis);
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(t);
+  }, [address, analysis?.status]);
 
   async function analyze() {
-    if (analyzing) return;
-    setAnalyzing(true);
-    setAnalysisErr(null);
+    if (analysis?.status === "running") return;
+    setAnalysisHidden(false);
     try {
       const r = await fetch(`/api/wallet/${address}/analyze`, {
         method: "POST",
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
-      setAnalysis(d);
+      setAnalysis(d.analysis);
     } catch (err) {
-      setAnalysisErr(err instanceof Error ? err.message : "分析失败,请重试");
-    } finally {
-      setAnalyzing(false);
+      setAnalysis({
+        status: "error",
+        content: null,
+        model: null,
+        usage: { promptTokens: 0, completionTokens: 0 },
+        error: err instanceof Error ? err.message : "分析请求失败,请重试",
+        startedAt: Date.now(),
+        finishedAt: null,
+      });
     }
   }
 
@@ -296,10 +337,14 @@ export function WalletModal({
           <div className="ml-3 flex shrink-0 items-center gap-2">
             <button
               onClick={analyze}
-              disabled={analyzing || !detail}
+              disabled={analysis?.status === "running"}
               className="rounded border border-accent/60 px-2.5 py-1 text-sm text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {analyzing ? "分析中…" : analysis ? "重新分析" : "✦ 分析"}
+              {analysis?.status === "running"
+                ? "分析中…"
+                : analysis?.status === "done"
+                  ? "重新分析"
+                  : "✦ 分析"}
             </button>
             <button
               onClick={onClose}
@@ -326,31 +371,39 @@ export function WalletModal({
             ))}
           </div>
 
-          {(analysis || analyzing || analysisErr) && (
+          {analysis && !analysisHidden && (
             <div className="mt-4 shrink-0 rounded border border-accent/30 bg-panel2 px-4 py-3">
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-xs font-medium tracking-wide text-accent">
                   AI 检视报告
+                  {analysis.status === "done" && analysis.finishedAt && (
+                    <span
+                      className="ml-2 font-mono font-normal text-mut"
+                      suppressHydrationWarning
+                    >
+                      {fmtAgo(analysis.finishedAt)}
+                    </span>
+                  )}
                 </h3>
-                {analysis && (
+                {analysis.status !== "running" && (
                   <button
-                    onClick={() => {
-                      setAnalysis(null);
-                      setAnalysisErr(null);
-                    }}
+                    onClick={() => setAnalysisHidden(true)}
                     className="text-[11px] text-mut hover:text-ink2"
                   >
                     收起
                   </button>
                 )}
               </div>
-              {analyzing ? (
+              {analysis.status === "running" ? (
                 <p className="text-xs text-mut">
                   正在调用模型分析该地址的持仓、成交与历史盈亏,约需半分钟…
+                  关掉弹窗也不会中断,回来即可查看。
                 </p>
-              ) : analysisErr ? (
-                <p className="text-xs text-down-ink">{analysisErr}</p>
-              ) : analysis ? (
+              ) : analysis.status === "error" ? (
+                <p className="text-xs text-down-ink">
+                  {analysis.error ?? "分析失败,请重试"}
+                </p>
+              ) : (
                 <>
                   <div className="max-h-[38vh] overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-ink2">
                     {analysis.content}
@@ -361,7 +414,7 @@ export function WalletModal({
                     仅供参考,不构成投资建议
                   </div>
                 </>
-              ) : null}
+              )}
             </div>
           )}
 
