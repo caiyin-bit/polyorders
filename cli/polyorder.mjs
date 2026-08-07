@@ -106,9 +106,11 @@ const HELP = `polyorder —— polyorders 命令行(${DEFAULT_ORIGIN})
   openorders              交易所上未成交的挂单(含官网手动挂的)
   cancel <订单号>          撤单。数字为库内订单号,0x 开头为 CLOB 订单号(需 trade 权限)
   trade --market <M> --outcome yes|no --side buy|sell
-        [--amount <USD>] [--shares <N>] [--limit <价格>]
+        [--amount <USD>] [--shares <N>] [--limit <价格>] [--expires <时长>]
                           下单。市价买用 --amount;卖出与限价单用 --shares;
                           限价单再加 --limit。market 支持 slug / 页面链接 / conditionId。
+                          --expires 给限价单设有效期(GTD):90、30m、2h、1d,
+                          留空则挂到撤销为止(GTC),最短 5 分钟。
                           需要 trade 权限;服务端强制 dry-run 开关与金额限额
   skill                   拉取服务端给 Agent 的接入契约(SKILL.md)
   raw <GET|POST> <path> [json-body]
@@ -266,6 +268,7 @@ async function main() {
           amount: { type: "string" },
           shares: { type: "string" },
           limit: { type: "string" },
+          expires: { type: "string" },
         },
       });
       const side = values.side?.toUpperCase();
@@ -280,6 +283,7 @@ async function main() {
           amountUsd: values.amount ? Number(values.amount) : undefined,
           shares: values.shares ? Number(values.shares) : undefined,
           limitPrice: values.limit ? Number(values.limit) : undefined,
+          expiresIn: values.expires,
         }),
       );
       return;

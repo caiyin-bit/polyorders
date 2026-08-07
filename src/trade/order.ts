@@ -3,6 +3,7 @@ import { TRADE_FEE_BUFFER } from "../config";
 import { query } from "../db";
 import { sendAlert } from "../telegram";
 import { getTradeClient } from "./client";
+import { expirationTs, orderTypeOf, parseDuration } from "./expiry";
 import { checkLimits, tradeLimits } from "./risk";
 
 export type OrderRequest = {
@@ -14,8 +15,10 @@ export type OrderRequest = {
   amountUsd?: number;
   /** SELL 必填:卖出份额 */
   shares?: number;
-  /** 填写则下 GTC 限价单;留空为市价单 */
+  /** 填写则下限价单;留空为市价单 */
   limitPrice?: number;
+  /** 限价单有效期:分钟数或 "30m"/"2h"/"1d";留空为挂到撤销为止(GTC) */
+  expiresIn?: string | number;
   /** 第二期跟单时标记来源地址 */
   sourceAddress?: string;
   /** 由 agent 发起时记录是哪个 agent,便于审计 */
@@ -109,6 +112,8 @@ async function resolveMarket(
 type Recorded = Omit<OrderResult, "id"> & {
   /** 含手续费的支出估计,供日累计限额统计;未走到风控前为 null */
   spendUsd?: number | null;
+  /** 解析后的有效期(分钟),0 或缺省表示 GTC */
+  expiryMinutes?: number;
   request: OrderRequest;
   market?: Market | null;
   response?: unknown;
@@ -163,7 +168,10 @@ async function record(r: Recorded): Promise<OrderResult> {
       r.market?.question ?? null,
       r.request.outcome,
       r.request.side,
-      r.request.limitPrice ? "GTC" : "FAK",
+      orderTypeOf({
+        limitPrice: r.request.limitPrice,
+        expiryMinutes: r.expiryMinutes,
+      }),
       r.price,
       r.size,
       r.amountUsd,
@@ -251,6 +259,21 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
     });
   }
 
+  // 有效期非法要在下单前拦住,别等交易所拒单
+  const parsed = parseDuration(req.expiresIn);
+  if ("error" in parsed) {
+    return record({
+      ...EMPTY,
+      request: req,
+      market,
+      tokenId,
+      status: "failed",
+      dryRun,
+      error: parsed.error,
+    });
+  }
+  const expiryMinutes = parsed.minutes;
+
   const tick = Number(market.trading.minimumTickSize ?? 0.01);
   const priceDecimals = decimalsForTick(tick);
   const price = req.limitPrice ? roundTo(req.limitPrice, priceDecimals) : null;
@@ -312,6 +335,7 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
     size,
     amountUsd,
     spendUsd: spend,
+    expiryMinutes,
   };
 
   try {
@@ -320,7 +344,15 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
       if (size === null) {
         return record({ ...common, status: "failed", dryRun, error: "限价单必须指定份额" });
       }
-      const params = { tokenId, price, size, side };
+      // 传 expiration 即为 GTD;省略则是 GTC(挂到撤销为止)
+      const expiration = expirationTs(expiryMinutes, Date.now());
+      const params = {
+        tokenId,
+        price,
+        size,
+        side,
+        ...(expiration ? { expiration } : {}),
+      };
       if (dryRun) {
         const signed = await client.createLimitOrder(params);
         return record({ ...common, status: "dry_run", dryRun, response: signed });

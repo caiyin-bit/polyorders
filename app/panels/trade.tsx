@@ -62,6 +62,7 @@ export function TradePanel() {
   const [amount, setAmount] = useState("");
   const [shares, setShares] = useState("");
   const [limitPrice, setLimitPrice] = useState("");
+  const [expiresIn, setExpiresIn] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -124,6 +125,7 @@ export function TradePanel() {
           amountUsd: side === "BUY" ? Number(amount) : undefined,
           shares: side === "SELL" ? Number(shares) : undefined,
           limitPrice: limitPrice ? Number(limitPrice) : undefined,
+          expiresIn: expiresIn || undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -226,6 +228,23 @@ export function TradePanel() {
           className={inputCls}
           disabled={MANUAL_TRADE_DISABLED}
         />
+        {/* 有效期只对限价单有意义,市价单是即时成交或撤销 */}
+        {limitPrice && (
+          <select
+            value={expiresIn}
+            onChange={(e) => setExpiresIn(e.target.value)}
+            className={inputCls}
+            disabled={MANUAL_TRADE_DISABLED}
+            title="到期未成交则自动撤销;留空为挂到手动撤销为止"
+          >
+            <option value="">不过期(GTC,挂到撤销为止)</option>
+            <option value="30m">30 分钟后过期</option>
+            <option value="2h">2 小时后过期</option>
+            <option value="8h">8 小时后过期</option>
+            <option value="1d">1 天后过期</option>
+            <option value="7d">7 天后过期</option>
+          </select>
+        )}
         <button
           onClick={submit}
           disabled={MANUAL_TRADE_DISABLED || busy || !market}

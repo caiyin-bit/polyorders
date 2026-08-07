@@ -66,6 +66,7 @@ export async function POST(req: Request) {
       amountUsd: body.amountUsd ? Number(body.amountUsd) : undefined,
       shares: body.shares ? Number(body.shares) : undefined,
       limitPrice: body.limitPrice ? Number(body.limitPrice) : undefined,
+      expiresIn: body.expiresIn,
     });
     return Response.json(result);
   } catch (err) {
