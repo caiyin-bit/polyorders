@@ -267,7 +267,7 @@ export default function Dashboard({
           <table className="w-full text-left text-xs">
             <thead className="text-[11px] text-mut">
               <tr className="border-b border-line">
-                <th className="py-2 pl-4 font-normal">
+                <th className="py-2 text-center font-normal">
                   <button
                     onClick={() => toggleSort("rank")}
                     className="hover:text-ink2"
@@ -275,7 +275,7 @@ export default function Dashboard({
                     #{sortKey === "rank" && (sortAsc ? " ▲" : " ▼")}
                   </button>
                 </th>
-                <th className="py-2 font-normal">地址 / 用户名</th>
+                <th className="py-2 text-center font-normal">地址 / 用户名</th>
                 {COLUMNS.slice(1).map((col) => (
                   <th key={col.key} className="py-2 pr-3 text-right font-normal">
                     <button
@@ -287,7 +287,8 @@ export default function Dashboard({
                     </button>
                   </th>
                 ))}
-                <th className="py-2 pr-4 text-right font-normal">近 24 笔</th>
+                {/* 该列的柱状图是居中的,表头跟着居中才对得上 */}
+                <th className="py-2 text-center font-normal">近 24 笔</th>
               </tr>
             </thead>
             <tbody>
