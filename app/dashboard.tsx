@@ -10,6 +10,7 @@ import { FunnelPanel } from "@/app/panels/funnel";
 import { PipelinePanel } from "@/app/panels/pipeline";
 import { PortfolioPanel } from "@/app/panels/portfolio";
 import { TradePanel } from "@/app/panels/trade";
+import { UsersPanel } from "@/app/panels/users";
 import { WalletModal } from "@/app/panels/wallet-modal";
 import {
   WatchPanel,
@@ -212,6 +213,7 @@ export default function Dashboard({
         <PortfolioPanel />
         <TradePanel />
         <AgentPanel />
+        <UsersPanel />
         <PipelinePanel />
       </div>
 

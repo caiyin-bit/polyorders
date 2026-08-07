@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/src/session";
 import { query } from "@/src/db";
 import { cancelByOrderId, openOrders } from "@/src/trade/manage";
 import { placeOrder, type OrderRequest } from "@/src/trade/order";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
 
 /** 撤单。手动下单表单虽已停用,撤单仍保留——停掉的是开仓,不是止损手段 */
 export async function DELETE(req: Request) {
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   let id: unknown;
   try {
     id = ((await req.json()) as { id?: unknown }).id;
@@ -36,6 +39,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   let body: Partial<OrderRequest>;
   try {
     body = (await req.json()) as Partial<OrderRequest>;
@@ -68,6 +73,7 @@ export async function POST(req: Request) {
       limitPrice: body.limitPrice ? Number(body.limitPrice) : undefined,
       expiresIn: body.expiresIn,
       postOnly: body.postOnly === true,
+      userId: guard.user.id,
     });
     return Response.json(result);
   } catch (err) {

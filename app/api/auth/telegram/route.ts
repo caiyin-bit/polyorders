@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import {
   createSession,
   DISPLAY_COOKIE,
-  isAllowed,
   SESSION_COOKIE,
   SESSION_MAX_AGE,
 } from "@/src/auth";
+import { recordLogin } from "@/src/users";
 import { verifyTelegramIdToken } from "@/src/telegram-oidc";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +26,12 @@ export async function POST(req: Request) {
     console.warn("auth: id_token 验签未通过");
     return NextResponse.json({ error: "invalid" }, { status: 401 });
   }
-  if (!isAllowed(user.id)) {
-    console.warn(`auth: 用户 ${user.id} 不在白名单内`);
+  // 准入改由 recordLogin 判定:环境变量白名单 或 库内 active 用户。
+  // 它同时把用户落库并返回角色,登录与用户维护是同一件事的两面。
+  try {
+    await recordLogin(user);
+  } catch {
+    console.warn(`auth: 用户 ${user.id} 不在允许名单内`);
     return NextResponse.json({ error: "denied" }, { status: 403 });
   }
 

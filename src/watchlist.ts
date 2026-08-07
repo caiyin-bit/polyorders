@@ -62,7 +62,10 @@ export async function watchlistView(): Promise<WatchlistView> {
 }
 
 /** 加入关注池。返回中文错误原因,成功返回 null */
-export async function addToWatchlist(address: string): Promise<string | null> {
+export async function addToWatchlist(
+  address: string,
+  addedBy?: number,
+): Promise<string | null> {
   const { rows } = await query<{ n: number }>(
     "SELECT COUNT(*)::int AS n FROM watchlist WHERE address <> $1",
     [address],
@@ -71,8 +74,9 @@ export async function addToWatchlist(address: string): Promise<string | null> {
     return `关注池已满(${WATCH_POOL_LIMIT} 个),请先移除一个`;
   }
   await query(
-    "INSERT INTO watchlist (address, added_at) VALUES ($1, $2) ON CONFLICT (address) DO NOTHING",
-    [address, Date.now()],
+    `INSERT INTO watchlist (address, added_at, added_by) VALUES ($1, $2, $3)
+     ON CONFLICT (address) DO NOTHING`,
+    [address, Date.now(), addedBy ?? null],
   );
   return null;
 }

@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/src/session";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, verifySession } from "@/src/auth";
 import { AGENT_CLAIM_TTL_MS } from "@/src/config";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
 // 但仍需自行读取会话以取得认领者的 Telegram ID。
 
 export async function POST(req: Request) {
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   const cookie = (await cookies()).get(SESSION_COOKIE)?.value;
   const session = cookie ? await verifySession(cookie) : null;
   if (!session) {

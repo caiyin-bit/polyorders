@@ -25,6 +25,8 @@ export type OrderRequest = {
   sourceAddress?: string;
   /** 由 agent 发起时记录是哪个 agent,便于审计 */
   agentId?: number;
+  /** 由人在界面发起时记录是哪个用户,与 agentId 互斥 */
+  userId?: number;
 };
 
 export type OrderResult = {
@@ -175,8 +177,8 @@ async function record(r: Recorded): Promise<OrderResult> {
        (source_address, condition_id, token_id, market_slug, title, outcome,
         side, order_type, price, size, amount_usd, status, dry_run,
         clob_order_id, clob_status, error, request_json, response_json, created_at,
-        agent_id, spend_usd)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+        agent_id, spend_usd, user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      RETURNING id`,
     [
       r.request.sourceAddress ?? null,
@@ -203,6 +205,7 @@ async function record(r: Recorded): Promise<OrderResult> {
       Date.now(),
       r.request.agentId ?? null,
       r.spendUsd ?? null,
+      r.request.userId ?? null,
     ],
   );
   // 旁路推送:不 await,告警慢或失败都不该拖住下单响应

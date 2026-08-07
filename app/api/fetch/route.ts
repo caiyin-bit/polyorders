@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/src/session";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { openSync } from "node:fs";
 import { LEADERBOARD } from "@/src/config";
@@ -140,6 +141,8 @@ async function dbCurrentRun(): Promise<{ step: string; started_at: number } | nu
 }
 
 export async function POST() {
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   // Vercel serverless 无常驻进程,线上抓取由 GitHub Actions 定时执行
   if (process.env.VERCEL) {
     return Response.json(

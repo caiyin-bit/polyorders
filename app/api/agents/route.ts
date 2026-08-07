@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/src/session";
 import { query } from "@/src/db";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: Request) {
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   let body: { id?: unknown; scopes?: unknown; revoked?: unknown };
   try {
     body = (await req.json()) as typeof body;

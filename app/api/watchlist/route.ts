@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/src/session";
 import {
   addToWatchlist,
   normalizeAddress,
@@ -14,6 +15,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   let raw: unknown;
   try {
     raw = ((await req.json()) as { address?: unknown }).address;
@@ -23,12 +26,14 @@ export async function POST(req: Request) {
     return Response.json({ error: "地址格式不合法" }, { status: 400 });
   }
 
-  const err = await addToWatchlist(address);
+  const err = await addToWatchlist(address, guard.user.id);
   if (err) return Response.json({ error: err }, { status: 409 });
   return Response.json({ ok: true });
 }
 
 export async function DELETE(req: Request) {
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   let raw: unknown;
   try {
     raw = ((await req.json()) as { address?: unknown }).address;
