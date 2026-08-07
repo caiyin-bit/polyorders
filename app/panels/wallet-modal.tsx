@@ -276,6 +276,16 @@ export function WalletModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // 弹窗存续期间锁住背景滚动:否则滚轮事件会穿透蒙板,把底下的榜单一起滚走,
+  // 关掉弹窗后页面已经不知道滚到哪里去了
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   function copy() {
     navigator.clipboard?.writeText(address).then(() => {
       setCopied(true);
@@ -356,7 +366,7 @@ export function WalletModal({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-5 lg:overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 py-5 lg:overflow-hidden">
           <div className="grid shrink-0 grid-cols-3 gap-2.5 sm:grid-cols-6">
             {stats.map((st) => (
               <div
@@ -405,7 +415,7 @@ export function WalletModal({
                 </p>
               ) : (
                 <>
-                  <div className="max-h-[38vh] overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-ink2">
+                  <div className="max-h-[38vh] overflow-y-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-ink2">
                     {analysis.content}
                   </div>
                   <div className="mt-2 border-t border-line/60 pt-1.5 font-mono text-[10px] text-mut">
@@ -419,7 +429,7 @@ export function WalletModal({
           )}
 
           <div className="mt-5 grid grid-cols-1 gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
-            <section className="min-h-0 lg:overflow-y-auto lg:pr-2">
+            <section className="min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
               <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
                 最新动向
               </h3>
@@ -497,7 +507,7 @@ export function WalletModal({
               </div>
             </section>
 
-            <section className="min-h-0 lg:overflow-y-auto lg:pr-2">
+            <section className="min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
               <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
                 已平仓
                 <span className="ml-2 font-mono font-normal text-mut">
