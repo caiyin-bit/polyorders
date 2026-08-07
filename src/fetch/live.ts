@@ -5,9 +5,11 @@ import {
   TRADES_KEEP_PER_ADDRESS,
   TRADES_RETENTION_DAYS,
 } from "../config";
+import { maybeCopy } from "../copy/engine";
+import { RULES } from "../copy/rules";
 import { query, withTransaction } from "../db";
 import { createLimiter, fetchJson } from "../http";
-import { recordSignalsBatch } from "../signals";
+import { fetchBookTop, recordSignalsBatch } from "../signals";
 
 type ApiOpenPosition = {
   conditionId: string;
@@ -154,7 +156,7 @@ async function fetchNewTrades(
       inserted += res.rowCount ?? 0;
       // 同批落一份信号(补 RTDS 覆盖不到的地址);signals 自己去重,
       // RTDS 已经记过的这里会静默跳过
-      await recordSignalsBatch(
+      const newSignals = await recordSignalsBatch(
         address,
         rowsToInsert.map((t) => ({
           conditionId: t.conditionId,
@@ -171,6 +173,29 @@ async function fetchNewTrades(
         })),
         source,
       );
+      // 关注池的兜底信号同样交给跟单引擎裁决,否则影子成绩单只覆盖 RTDS
+      // 抓到的那部分。窗口内的才补抓盘口(裁决要成本证据;超窗的反正会被
+      // 判 stale,回填几百条旧单时不必打几百次 book 接口)。
+      // live 源是 Top20 跟踪数据,不是跟单对象,维持不裁决
+      if (source === "watch") {
+        for (const sig of newSignals) {
+          try {
+            const book =
+              sig.asset && sig.lagMs <= RULES.maxLagMs
+                ? await limiter(() => fetchBookTop(sig.asset!))
+                : { bestBid: null, bestAsk: null };
+            if (book.bestBid !== null || book.bestAsk !== null) {
+              await query(
+                "UPDATE signals SET best_bid = $1, best_ask = $2 WHERE id = $3",
+                [book.bestBid, book.bestAsk, sig.id],
+              );
+            }
+            await maybeCopy({ ...sig, bestAsk: book.bestAsk }, address);
+          } catch (err) {
+            console.error(`${source}: 信号 ${sig.id} 裁决失败 ${String(err)}`);
+          }
+        }
+      }
     }
     // 已翻到 since 之前或最后一页,增量完成
     if (fresh.length < page.length || page.length < PAGE_SIZE) break;

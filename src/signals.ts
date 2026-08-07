@@ -51,6 +51,8 @@ export type RecordedSignal = {
   title: string | null;
   bestAsk: number | null;
   source: string;
+  /** 检测时刻 − 成交时刻,毫秒;跟单规则据此判新鲜度 */
+  lagMs: number;
 };
 
 /** 单条写入(RTDS 路径)。去重命中返回 null——同一信号只评估一次 */
@@ -60,6 +62,7 @@ export async function recordSignal(
   source: "rtds",
   book: BookTop,
 ): Promise<RecordedSignal | null> {
+  const detectedAt = Date.now();
   const { rows } = await query<{ id: number }>(
     `INSERT INTO signals
        (address, condition_id, asset, side, outcome, price, size, usd,
@@ -80,7 +83,7 @@ export async function recordSignal(
       t.title ?? null,
       t.eventSlug ?? null,
       t.timestamp,
-      Date.now(),
+      detectedAt,
       source,
       book.bestBid,
       book.bestAsk,
@@ -99,16 +102,18 @@ export async function recordSignal(
     title: t.title ?? null,
     bestAsk: book.bestAsk,
     source,
+    lagMs: detectedAt - t.timestamp * 1000,
   };
 }
 
-/** 批量写入(抓取轮询路径)。轮询本身就滞后,不取盘口 */
+/** 批量写入(抓取轮询路径),返回真正新插入的信号(去重命中的不在内)。
+ * 落库时不取盘口——是否值得为裁决补抓,由调用方按延迟决定 */
 export async function recordSignalsBatch(
   address: string,
   trades: SignalTrade[],
   source: "watch" | "live",
-): Promise<number> {
-  if (trades.length === 0) return 0;
+): Promise<RecordedSignal[]> {
+  if (trades.length === 0) return [];
   const now = Date.now();
   const values: unknown[] = [];
   const tuples = trades.map((t, i) => {
@@ -131,16 +136,39 @@ export async function recordSignalsBatch(
     const b = i * 14;
     return `($${b + 1},$${b + 2},$${b + 3},$${b + 4},$${b + 5},$${b + 6},$${b + 7},$${b + 8},$${b + 9},$${b + 10},$${b + 11},$${b + 12},$${b + 13},NULL,NULL,$${b + 14})`;
   });
-  const res = await query(
+  const res = await query<{
+    id: number;
+    condition_id: string;
+    asset: string | null;
+    side: string;
+    outcome: string | null;
+    price: number | null;
+    usd: number | null;
+    title: string | null;
+    trade_ts: number;
+  }>(
     `INSERT INTO signals
        (address, condition_id, asset, side, outcome, price, size, usd,
         title, event_slug, trade_ts, detected_at, source, best_bid, best_ask,
         transaction_hash)
      VALUES ${tuples.join(",")}
-     ON CONFLICT (address, transaction_hash, asset, side) DO NOTHING`,
+     ON CONFLICT (address, transaction_hash, asset, side) DO NOTHING
+     RETURNING id, condition_id, asset, side, outcome, price, usd, title, trade_ts`,
     values,
   );
-  return res.rowCount ?? 0;
+  return res.rows.map((r) => ({
+    id: r.id,
+    conditionId: r.condition_id,
+    asset: r.asset,
+    side: r.side,
+    outcome: r.outcome,
+    price: r.price,
+    usd: r.usd,
+    title: r.title,
+    bestAsk: null,
+    source,
+    lagMs: now - r.trade_ts * 1000,
+  }));
 }
 
 // ── 价格观测(marks)────────────────────────────────────────

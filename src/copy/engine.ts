@@ -73,8 +73,8 @@ async function copySpentToday(): Promise<number> {
 }
 
 /**
- * 引擎入口:RTDS 每记下一条新信号调一次。
- * 一律不抛错——跟单是旁路,任何异常都不能影响 watcher 主流程。
+ * 引擎入口:每记下一条新信号调一次(RTDS 实时路径与 watch 轮询兜底路径)。
+ * 一律不抛错——跟单是旁路,任何异常都不能影响调用方主流程。
  */
 export async function maybeCopy(
   s: RecordedSignal,

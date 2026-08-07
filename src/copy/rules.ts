@@ -11,6 +11,9 @@ export const RULES = {
   minUsd: 200,
   /** 盘口保护:当前卖一超出信号价 3% 说明价格已经跑了 */
   maxAskRatio: 1.03,
+  /** 最大可接受的检测延迟。watch 轮询每 5 分钟一轮,给足一轮+抓取余量;
+   * 更旧的信号(断线补齐、首次回填)只配做 marks 离线观测,不进裁决样本 */
+  maxLagMs: 6 * 60_000,
   /** 同一 (市场, outcome, 方向) 的冷却窗口 */
   cooldownMs: 24 * 3_600_000,
 } as const;
@@ -20,7 +23,8 @@ const EXCLUDED_TITLE = /\bUp or Down\b/i;
 
 export type SignalForRules = {
   side: string;
-  source: string;
+  /** 检测时刻 − 成交时刻,毫秒 */
+  lagMs: number;
   price: number | null;
   usd: number | null;
   title: string | null;
@@ -34,9 +38,9 @@ export function evaluateSignal(s: SignalForRules): Verdict {
 
   // v1 只跟买入开仓;来源方的卖出作为我们的退出信号是第二期的事
   if (s.side !== "BUY") return skip("non-buy");
-  // 轮询来源的信号已滞后 5min~2h,实时跟单只认 RTDS;它们仍会被 marks 观测,
-  // 用于离线回答「带延迟跟单还有没有肉」
-  if (s.source !== "rtds") return skip("stale-source");
+  // 新鲜度按实际检测延迟判,不看来源:RTDS 秒级通过,watch 轮询多数在窗口内,
+  // 真跑掉的价格由下面的盘口保护兜住。超窗的只配做 marks 离线观测
+  if (s.lagMs > RULES.maxLagMs) return skip("stale");
   if (s.price == null || s.price < RULES.minPrice || s.price > RULES.maxPrice) {
     return skip("price-band");
   }

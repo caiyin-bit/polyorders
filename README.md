@@ -72,7 +72,7 @@ pnpm dev
 ## 信号与跟单(影子模式)
 
 - 被跟踪地址(Top 20 + 关注池)的每笔成交落入 `signals`,RTDS 路径带检测瞬间的盘口(买一/卖一);每 5 分钟的 cron 用 CLOB 历史价接口补 +5m/+1h/+24h 观测与结算终值(`signal_marks`)
-- 跟单引擎跑在 watcher 里,默认 **shadow**:按策略规则(`src/copy/rules.ts`)对每条实时信号做裁决并记录 `copy_decisions`(含跳过原因与模拟成交价),一分钱不动。实盘跟单需 `TRADING_ENABLED` 与 `COPY_TRADING_ENABLED` 双开关,且受独立日预算约束
+- 跟单引擎挂在两条信号路径上(RTDS 实时 + watch 轮询兜底),默认 **shadow**:按策略规则(`src/copy/rules.ts`)对关注池的每条信号做裁决并记录 `copy_decisions`(含跳过原因与模拟成交价),一分钱不动。新鲜度按实际检测延迟判(超过 6 分钟跳 `stale`),不看来源。实盘跟单需 `TRADING_ENABLED` 与 `COPY_TRADING_ENABLED` 双开关,且受独立日预算约束
 - 成绩单看 `/api/agent/copystats` 或 `polyorder copystats`:按持有期的模拟收益、跳过原因分布、分来源钱包表现——live 开闸与否由这份数据说了算
 - 我方权益每小时快照进 `equity_snapshots`
 

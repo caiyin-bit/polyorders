@@ -5,7 +5,7 @@ import { evaluateSignal, RULES, type SignalForRules } from "./rules";
 // 一条完全合格的信号;各用例在此基础上破坏单一条件
 const good = (): SignalForRules => ({
   side: "BUY",
-  source: "rtds",
+  lagMs: 3_000,
   price: 0.55,
   usd: 500,
   title: "Will X win the election?",
@@ -26,9 +26,14 @@ describe("evaluateSignal:策略 v1", () => {
     assert.equal(reasonOf({ ...good(), side: "SELL" }), "non-buy");
   });
 
-  it("轮询来源一律不实时跟(它们已滞后 5min~2h)", () => {
-    assert.equal(reasonOf({ ...good(), source: "watch" }), "stale-source");
-    assert.equal(reasonOf({ ...good(), source: "live" }), "stale-source");
+  it("超过延迟窗口不跟(断线补齐、首次回填的旧单)", () => {
+    assert.equal(reasonOf({ ...good(), lagMs: RULES.maxLagMs + 1 }), "stale");
+    assert.equal(reasonOf({ ...good(), lagMs: 2 * 3_600_000 }), "stale");
+  });
+
+  it("延迟窗口边界:watch 轮询典型延迟放行", () => {
+    assert.deepEqual(evaluateSignal({ ...good(), lagMs: RULES.maxLagMs }), { copy: true });
+    assert.deepEqual(evaluateSignal({ ...good(), lagMs: 4 * 60_000 }), { copy: true });
   });
 
   it("价格带过滤:0.9+ 收尾盘与超低价彩票都不跟", () => {
