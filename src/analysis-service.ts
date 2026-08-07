@@ -25,8 +25,9 @@ const RECENT_CLOSED_LIMIT = 30;
 const CURVE_POINTS = 30;
 
 // running 行的判死线。要盖过「批量分析排队等待 + 单次执行」的总时长:
-// 20 个任务并发 3、单个约 30s,队尾要等 3 分钟以上才开跑
-export const STALE_MS = 10 * 60_000;
+// 批量一次最多 100 个地址、并发 3、单个约 30s,队尾要等约 17 分钟才开跑,
+// 判死线必须留在其后;代价是真正的孤儿行要挂半小时才显示「中断」
+export const STALE_MS = 30 * 60_000;
 
 // 每地址保留的历史条数。只有最新一条会被展示,多留几条仅供排查
 const KEEP_PER_ADDRESS = 5;

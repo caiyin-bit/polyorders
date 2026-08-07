@@ -153,50 +153,6 @@ export default function Dashboard({
   const [ratings, setRatings] = useState<Map<string, RatingItem>>(new Map());
   const [batchMsg, setBatchMsg] = useState<string | null>(null);
 
-  const loadRatings = useCallback(async () => {
-    try {
-      const res = await fetch("/api/leaderboard/analyze");
-      const data = (await res.json()) as { items: RatingItem[] };
-      setRatings(new Map(data.items.map((i) => [i.address.toLowerCase(), i])));
-    } catch {
-      /* 评级不可用不影响主看板 */
-    }
-  }, []);
-
-  useEffect(() => {
-    loadRatings();
-  }, [loadRatings]);
-
-  const analyzingCount = useMemo(
-    () => [...ratings.values()].filter((i) => i.status === "running").length,
-    [ratings],
-  );
-
-  // 批量分析进行中才轮询;全部完结后这个 effect 自然停摆
-  useEffect(() => {
-    if (analyzingCount === 0) return;
-    const t = setInterval(loadRatings, 4000);
-    return () => clearInterval(t);
-  }, [analyzingCount, loadRatings]);
-
-  async function analyzeAll() {
-    setBatchMsg(null);
-    try {
-      const res = await fetch("/api/leaderboard/analyze", { method: "POST" });
-      const d = (await res.json()) as {
-        queued?: number;
-        skipped?: number;
-        error?: string;
-      };
-      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
-      if (d.queued === 0) setBatchMsg("全部地址都有近期报告,未重新分析");
-      else if (d.skipped) setBatchMsg(`${d.queued} 个开始分析,${d.skipped} 个有近期报告已跳过`);
-      await loadRatings();
-    } catch (err) {
-      setBatchMsg(err instanceof Error ? err.message : "发起失败");
-    }
-  }
-
   const loadWatch = useCallback(async () => {
     try {
       const res = await fetch("/api/watchlist");
@@ -311,6 +267,64 @@ export default function Dashboard({
   );
   const visible = filtered.slice(pageStart, pageEnd);
 
+  // 「列表分析」针对的是当前页可见地址——用户翻到哪页,分析的就是哪页;
+  // 曾经写死 Top N,翻到第二页点按钮就成了「毫无反应」
+  const visibleKey = useMemo(
+    () => visible.map((r) => r.address.toLowerCase()).join(","),
+    [visible],
+  );
+
+  const loadRatings = useCallback(async () => {
+    if (!visibleKey) return;
+    try {
+      const res = await fetch(`/api/leaderboard/analyze?addrs=${visibleKey}`);
+      const data = (await res.json()) as { items: RatingItem[] };
+      setRatings(new Map(data.items.map((i) => [i.address.toLowerCase(), i])));
+    } catch {
+      /* 评级不可用不影响主看板 */
+    }
+  }, [visibleKey]);
+
+  // 翻页/筛选变化即重拉当前页的评级
+  useEffect(() => {
+    loadRatings();
+  }, [loadRatings]);
+
+  const analyzingCount = useMemo(
+    () => [...ratings.values()].filter((i) => i.status === "running").length,
+    [ratings],
+  );
+
+  // 批量分析进行中才轮询;全部完结后这个 effect 自然停摆
+  useEffect(() => {
+    if (analyzingCount === 0) return;
+    const t = setInterval(loadRatings, 4000);
+    return () => clearInterval(t);
+  }, [analyzingCount, loadRatings]);
+
+  async function analyzeAll() {
+    setBatchMsg(null);
+    try {
+      const res = await fetch("/api/leaderboard/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ addresses: visibleKey.split(",") }),
+      });
+      const d = (await res.json()) as {
+        queued?: number;
+        skipped?: number;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
+      if (d.queued === 0) setBatchMsg("本页地址都有近期报告,未重新分析");
+      else if (d.skipped)
+        setBatchMsg(`${d.queued} 个开始分析,${d.skipped} 个有近期报告已跳过`);
+      await loadRatings();
+    } catch (err) {
+      setBatchMsg(err instanceof Error ? err.message : "发起失败");
+    }
+  }
+
   const tableRef = useRef<HTMLElement>(null);
   const firstRender = useRef(true);
   useEffect(() => {
@@ -365,7 +379,7 @@ export default function Dashboard({
           <button
             onClick={analyzeAll}
             disabled={analyzingCount > 0}
-            title={`对前 ${config.topN} 名逐一生成 AI 检视报告`}
+            title={`对当前页 ${visible.length} 个地址逐一生成 AI 检视报告`}
             className="rounded border border-accent/60 px-2 py-0.5 text-[11px] text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {analyzingCount > 0 ? `分析中 剩 ${analyzingCount} 个…` : "✦ 列表分析"}
