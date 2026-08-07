@@ -10,13 +10,13 @@ import { evaluateSignal, RULES, STRATEGY } from "./rules";
 // TRADING_ENABLED=true 且 COPY_TRADING_ENABLED=true,外加引擎自有的日预算。
 // 每条信号必留一行 copy_decisions——「为什么没跟」与「跟了会怎样」同样是回测数据。
 
-function copyMode(): "live" | "shadow" {
+export function copyMode(): "live" | "shadow" {
   return process.env.COPY_TRADING_ENABLED === "true" && tradeLimits().enabled
     ? "live"
     : "shadow";
 }
 
-function copyDailyMax(): number {
+export function copyDailyMax(): number {
   const n = Number(process.env.COPY_DAILY_MAX_USD);
   return Number.isFinite(n) && n > 0 ? n : COPY_DAILY_MAX_USD_DEFAULT;
 }

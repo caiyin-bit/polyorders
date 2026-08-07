@@ -12,6 +12,7 @@ import { PortfolioPanel } from "@/app/panels/portfolio";
 import { TradePanel } from "@/app/panels/trade";
 import { UsersPanel } from "@/app/panels/users";
 import { WalletModal } from "@/app/panels/wallet-modal";
+import { WatchModal } from "@/app/panels/watch-modal";
 import {
   WatchPanel,
   WatchStar,
@@ -147,6 +148,7 @@ export default function Dashboard({
   const [watchLimit, setWatchLimit] = useState(5);
   const [watchError, setWatchError] = useState<string | null>(null);
   const [watcher, setWatcher] = useState<WatcherState | null>(null);
+  const [watchOpen, setWatchOpen] = useState(false);
   const [ratings, setRatings] = useState<Map<string, RatingItem>>(new Map());
   const [batchMsg, setBatchMsg] = useState<string | null>(null);
 
@@ -350,6 +352,7 @@ export default function Dashboard({
           error={watchError}
           watcher={watcher}
           onRemove={toggleWatch}
+          onOpen={() => setWatchOpen(true)}
         />
         <PortfolioPanel />
         <TradePanel />
@@ -609,6 +612,8 @@ export default function Dashboard({
           onToggleWatch={() => toggleWatch(selected)}
         />
       )}
+
+      {watchOpen && <WatchModal onClose={() => setWatchOpen(false)} />}
     </div>
   );
 }

@@ -51,22 +51,29 @@ export function WatchPanel({
   error,
   watcher,
   onRemove,
+  onOpen,
 }: {
   watch: WatchRow[];
   limit: number;
   error: string | null;
   watcher: WatcherState | null;
   onRemove: (address: string) => void;
+  onOpen: () => void;
 }) {
   const live = watcher?.live ?? false;
   return (
-    <section className="rounded-lg border border-line bg-panel p-4">
+    <section
+      onClick={onOpen}
+      title="查看信号流、跟单引擎与影子成绩"
+      className="cursor-pointer rounded-lg border border-line bg-panel p-4 transition-colors hover:border-mut"
+    >
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-xs font-medium tracking-wide text-ink2">
           实时关注
           <span className="ml-2 font-mono tabular-nums text-mut">
             {watch.length}/{limit}
           </span>
+          <span className="ml-2 font-normal text-mut/70">详情 →</span>
         </h2>
         <span
           className="flex items-center gap-1 text-[10px] text-mut"
@@ -118,7 +125,11 @@ export function WatchPanel({
                     : "待首轮"}
               </span>
               <button
-                onClick={() => onRemove(w.address)}
+                onClick={(e) => {
+                  // 整个板块可点开详情弹窗,行内操作不能触发它
+                  e.stopPropagation();
+                  onRemove(w.address);
+                }}
                 className="shrink-0 text-bad-ink hover:underline"
               >
                 移除
