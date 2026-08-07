@@ -7,6 +7,20 @@ import { useCallback, useEffect, useState } from "react";
 
 type TradeLimits = { enabled: boolean; maxUsd: number; dailyMaxUsd: number };
 
+export type OpenOrderRow = {
+  clobOrderId: string;
+  orderId: number | null;
+  title: string | null;
+  outcome: string | null;
+  side: string;
+  price: number;
+  size: number;
+  sizeMatched: number;
+  sizeRemaining: number;
+  orderType: string;
+  expiresAt: string | null;
+};
+
 export type OrderRow = {
   id: number;
   condition_id: string;
@@ -52,6 +66,8 @@ export function TradePanel() {
   const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [limits, setLimits] = useState<TradeLimits | null>(null);
+  const [open, setOpen] = useState<OpenOrderRow[]>([]);
+  const [canceling, setCanceling] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,13 +75,34 @@ export function TradePanel() {
       const data = (await res.json()) as {
         orders: OrderRow[];
         limits: TradeLimits;
+        openOrders: OpenOrderRow[];
       };
       setOrders(data.orders);
       setLimits(data.limits);
+      setOpen(data.openOrders ?? []);
     } catch {
       /* 面板不可用不影响主看板 */
     }
   }, []);
+
+  async function cancel(id: number) {
+    setCanceling(id);
+    setError(null);
+    try {
+      const res = await fetch("/api/trade", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) setError(data.error ?? "撤单失败");
+      await load();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setCanceling(null);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -208,6 +245,65 @@ export function TradePanel() {
         <p className="mt-2 text-[11px] leading-4 text-mut">
           手动下单已暂停,面板与历史记录仅供查看。agent 端点与 CLI 不受影响。
         </p>
+      )}
+
+      {/* 挂单区。即便手动下单已停用也保留撤单——停掉的是开仓,不是收手的能力。
+          数据以交易所为准,官网手动挂的单同样列在这里 */}
+      {open.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          <h3 className="mb-1.5 text-[11px] text-ink2">
+            未成交挂单
+            <span className="ml-1.5 font-mono text-mut">{open.length}</span>
+          </h3>
+          <ul className="space-y-1.5">
+            {open.map((o) => (
+              <li key={o.clobOrderId} className="text-[11px] leading-4">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={o.side === "BUY" ? "text-up-ink" : "text-down-ink"}
+                  >
+                    {o.side === "BUY" ? "买" : "卖"}
+                  </span>
+                  <span className="text-ink2">{o.outcome?.toUpperCase()}</span>
+                  <span className="font-mono tabular-nums text-mut">
+                    {o.sizeRemaining.toFixed(2)}/{o.size.toFixed(2)} @{" "}
+                    {o.price.toFixed(3)}
+                  </span>
+                  <span
+                    className="rounded bg-panel2 px-1 text-[10px] text-mut"
+                    title={
+                      o.expiresAt
+                        ? `到期 ${new Date(o.expiresAt).toLocaleString("zh-CN")}`
+                        : "挂到撤销为止"
+                    }
+                  >
+                    {o.orderType}
+                  </span>
+                  <button
+                    onClick={() =>
+                      o.orderId != null ? cancel(o.orderId) : undefined
+                    }
+                    disabled={canceling !== null || o.orderId == null}
+                    title={
+                      o.orderId == null
+                        ? "这笔挂单不是本系统下的,请用 CLI 按 CLOB 订单号撤销"
+                        : undefined
+                    }
+                    className="ml-auto shrink-0 text-bad-ink hover:underline disabled:opacity-40 disabled:no-underline"
+                  >
+                    {canceling === o.orderId ? "撤销中…" : "撤单"}
+                  </button>
+                </div>
+                <div
+                  className="truncate text-mut"
+                  title={o.title ?? o.clobOrderId}
+                >
+                  {o.title ?? o.clobOrderId}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {error && <p className="mt-2 text-[11px] text-bad-ink">{error}</p>}

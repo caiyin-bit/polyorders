@@ -1,10 +1,24 @@
 import { query } from "@/src/db";
+import { cancelByOrderId, openOrders } from "@/src/trade/manage";
 import { placeOrder, type OrderRequest } from "@/src/trade/order";
 import { tradeLimits } from "@/src/trade/risk";
 
 export const dynamic = "force-dynamic";
 
 // 全站 middleware 已拦截 /api/*,此处无需再做鉴权
+
+/** 撤单。手动下单表单虽已停用,撤单仍保留——停掉的是开仓,不是止损手段 */
+export async function DELETE(req: Request) {
+  let id: unknown;
+  try {
+    id = ((await req.json()) as { id?: unknown }).id;
+  } catch {}
+  if (!Number.isInteger(Number(id))) {
+    return Response.json({ error: "缺少订单 id" }, { status: 400 });
+  }
+  const res = await cancelByOrderId(Number(id));
+  return Response.json(res, { status: res.ok ? 200 : 409 });
+}
 
 export async function GET() {
   const [ordersRes, limits] = await Promise.all([
@@ -16,7 +30,9 @@ export async function GET() {
     ),
     Promise.resolve(tradeLimits()),
   ]);
-  return Response.json({ orders: ordersRes.rows, limits });
+  // 挂单要问 CLOB(官网手动挂的单库里没有);私钥未配置时不该让整个面板挂掉
+  const open = await openOrders().catch(() => []);
+  return Response.json({ orders: ordersRes.rows, limits, openOrders: open });
 }
 
 export async function POST(req: Request) {

@@ -75,8 +75,10 @@ polyorders 是一个 Polymarket 高胜率钱包筛选与交易终端。你正在
 | GET | \`/api/agent/signals\` | read | 原始信号流(含引擎裁决、检测延迟、各持有期观测价) |
 | GET | \`/api/agent/watchlist\` | read | 实时关注池与 watcher 连接状态 |
 | GET | \`/api/agent/orders\` | read | 下单记录 |
+| GET | \`/api/agent/openorders\` | read | 交易所上未成交的挂单 |
 | POST/DELETE | \`/api/agent/watchlist\` | **watch** | 增删关注池地址 |
 | POST | \`/api/agent/trade\` | **trade** | 下单 |
+| DELETE | \`/api/agent/openorders\` | **trade** | 撤单 |
 
 ### 实时关注与跟单引擎
 

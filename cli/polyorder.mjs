@@ -103,6 +103,8 @@ const HELP = `polyorder —— polyorders 命令行(${DEFAULT_ORIGIN})
   watch <address>         加入关注池(需 watch 权限)
   unwatch <address>       移出关注池(需 watch 权限)
   orders [--mine]         下单记录(--mine 只看本 agent 下的单)
+  openorders              交易所上未成交的挂单(含官网手动挂的)
+  cancel <订单号>          撤单。数字为库内订单号,0x 开头为 CLOB 订单号(需 trade 权限)
   trade --market <M> --outcome yes|no --side buy|sell
         [--amount <USD>] [--shares <N>] [--limit <价格>]
                           下单。市价买用 --amount;卖出与限价单用 --shares;
@@ -236,6 +238,21 @@ async function main() {
     case "orders": {
       const mine = rest.includes("--mine");
       print(await request("GET", `/api/agent/orders${mine ? "?mine=1" : ""}`));
+      return;
+    }
+
+    case "openorders":
+      print(await request("GET", "/api/agent/openorders"));
+      return;
+
+    case "cancel": {
+      const ref = rest[0];
+      if (!ref) fail("用法:polyorder cancel <库内订单号 | CLOB 订单号>");
+      // 纯数字视为库内订单号,其余(0x…)当作 CLOB 订单号
+      const body = /^\d+$/.test(ref)
+        ? { id: Number(ref) }
+        : { clobOrderId: ref };
+      print(await request("DELETE", "/api/agent/openorders", body));
       return;
     }
 
