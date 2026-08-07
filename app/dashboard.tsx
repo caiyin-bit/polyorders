@@ -45,6 +45,43 @@ const COLUMNS: Array<{ key: SortKey; label: string; align: "left" | "right" }> =
   { key: "score", label: "SCORE", align: "right" },
 ];
 
+/**
+ * 可排序表头。
+ *
+ * 未激活的列也常驻一个淡箭头:原先箭头只在激活列显示,其余列与不可点的
+ * 「地址 / 用户名」看起来毫无区别,没人知道它能点。cursor-pointer 同理——
+ * 浏览器给 button 的默认光标是箭头而非手型,Tailwind 也不会自动加。
+ */
+function SortButton({
+  label,
+  col,
+  sortKey,
+  sortAsc,
+  onClick,
+}: {
+  label: string;
+  col: SortKey;
+  sortKey: SortKey;
+  sortAsc: boolean;
+  onClick: (key: SortKey) => void;
+}) {
+  const active = sortKey === col;
+  return (
+    <button
+      onClick={() => onClick(col)}
+      title={`按${label === "#" ? "排名" : label}排序`}
+      className={`cursor-pointer whitespace-nowrap hover:text-ink2 ${
+        active ? "font-medium text-ink2" : ""
+      }`}
+    >
+      {label}
+      <span className={active ? "" : "opacity-30"}>
+        {active ? (sortAsc ? " ▲" : " ▼") : " ▼"}
+      </span>
+    </button>
+  );
+}
+
 export default function Dashboard({
   rows,
   funnel,
@@ -167,7 +204,9 @@ export default function Dashboard({
     return m;
   }, [feed]);
 
-  const firstPageSize = config.topN;
+  // 第一页固定 topN 行,只在按排名排序时有意义——那是「最终入选」的一批。
+  // 换成按胜率等维度排序后,这个 20 就成了没来由的数字,回归正常分页
+  const firstPageSize = sortKey === "rank" ? config.topN : pageSize;
   const pageCount = Math.max(
     1,
     1 + Math.ceil(Math.max(0, filtered.length - firstPageSize) / pageSize)
@@ -270,23 +309,24 @@ export default function Dashboard({
             <thead className="text-[11px] text-mut">
               <tr className="border-b border-line">
                 <th className="py-2 text-center font-normal">
-                  <button
-                    onClick={() => toggleSort("rank")}
-                    className="hover:text-ink2"
-                  >
-                    #{sortKey === "rank" && (sortAsc ? " ▲" : " ▼")}
-                  </button>
+                  <SortButton
+                    label="#"
+                    col="rank"
+                    sortKey={sortKey}
+                    sortAsc={sortAsc}
+                    onClick={toggleSort}
+                  />
                 </th>
                 <th className="py-2 text-center font-normal">地址 / 用户名</th>
                 {COLUMNS.slice(1).map((col) => (
                   <th key={col.key} className="py-2 pr-3 text-right font-normal">
-                    <button
-                      onClick={() => toggleSort(col.key)}
-                      className="hover:text-ink2"
-                    >
-                      {col.label}
-                      {sortKey === col.key && (sortAsc ? " ▲" : " ▼")}
-                    </button>
+                    <SortButton
+                      label={col.label}
+                      col={col.key}
+                      sortKey={sortKey}
+                      sortAsc={sortAsc}
+                      onClick={toggleSort}
+                    />
                   </th>
                 ))}
                 {/* 该列的柱状图是居中的,表头跟着居中才对得上 */}
