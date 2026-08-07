@@ -121,10 +121,17 @@ function AgentOnboardModal({ onClose }: { onClose: () => void }) {
 export function AgentPanel() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [showModal, setShowModal] = useState(false);
+  // 只读用户拿不到 agent 数据,整块面板不渲染——给看不见摸不着的按钮
+  // 只会让人以为自己能操作
+  const [allowed, setAllowed] = useState(true);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/agents");
+      if (res.status === 403) {
+        setAllowed(false);
+        return;
+      }
       const data = (await res.json()) as { agents: AgentRow[] };
       setAgents(data.agents);
     } catch {
@@ -144,6 +151,8 @@ export function AgentPanel() {
     });
     await load();
   }
+
+  if (!allowed) return null;
 
   return (
     <section className="rounded-lg border border-line bg-panel p-4">

@@ -38,7 +38,11 @@ describe("会话与待审凭证的隔离", () => {
 
   it("签名被篡改一律拒绝", async () => {
     const t = await createSession(USER);
-    assert.equal(await verifySession(t.slice(0, -1) + "0"), null);
+    // 末位换成一个必定不同的字符:签名是十六进制,直接拼 "0" 有 1/16 概率
+    // 与原值相同,那样根本没发生篡改,断言会假阴性
+    const tampered = t.slice(0, -1) + (t.endsWith("0") ? "1" : "0");
+    assert.notEqual(tampered, t);
+    assert.equal(await verifySession(tampered), null);
     assert.equal(await verifySession("garbage"), null);
     assert.equal(await verifySession(""), null);
   });

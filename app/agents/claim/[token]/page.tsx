@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AGENT_CLAIM_TTL_MS } from "@/src/config";
 import { query } from "@/src/db";
+import { currentUser } from "@/src/session";
 import ClaimButton from "./claim-button";
 
 export const metadata: Metadata = { title: "认领 Agent · polyorders" };
@@ -28,6 +29,9 @@ export default async function ClaimPage({
     [token, Date.now() - AGENT_CLAIM_TTL_MS],
   );
   const agent = rows[0];
+  // 认领等于给 agent 授权,只读用户做不了。提前说清楚,别让人点了才被拒
+  const me = await currentUser();
+  const canClaim = me?.role === "admin";
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
@@ -70,7 +74,14 @@ export default async function ClaimPage({
               如果这不是你刚刚要求接入的 agent,请直接关闭本页——不认领它就拿不到任何权限。
             </p>
 
-            <ClaimButton token={token} name={agent.name} />
+            {canClaim ? (
+              <ClaimButton token={token} name={agent.name} />
+            ) : (
+              <p className="mt-5 rounded border border-line bg-panel2 px-3 py-2 text-xs leading-5 text-mut">
+                认领需要管理员权限,你当前是只读账号。
+                请把这个链接转给管理员,由他完成认领。
+              </p>
+            )}
           </>
         )}
       </div>

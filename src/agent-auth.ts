@@ -1,6 +1,7 @@
 // Agent 凭据:生成、哈希、校验。
 // 沿用 src/auth.ts 的做法只用 Web Crypto,不引入额外依赖。
 import { query } from "./db";
+import { envAllowedIds } from "./users";
 
 const KEY_PREFIX = "po_ag_";
 /** 前缀 + 8 位,仅供界面识别,不参与鉴权 */
@@ -65,6 +66,37 @@ export class AgentAuthError extends Error {
 }
 
 /**
+ * agent 的实际权限 = 授予的权限 ∩ 认领人当前能做的事。
+ *
+ * 权限不能停留在授予那一刻:管理员接入一个带 trade 的 agent 后被降为只读,
+ * 若不做这层收敛,他本人下不了单,留下的 agent 却照样能下——降权只收回了
+ * 人的权限,没收回他留下的钥匙。
+ *
+ * 认领人被停用或已不存在时按 invalid 处理,agent 整体失效。
+ */
+export function effectiveScopes(
+  scopes: string[],
+  owner: "admin" | "viewer" | "invalid",
+): string[] {
+  if (owner === "invalid") return [];
+  // 降为只读的人,其 agent 也只保留读——与人的能力保持一致
+  return owner === "admin" ? scopes : scopes.filter((s) => s === "read");
+}
+
+/** 由认领人的当前状态判定其能力档位 */
+export function ownerTier(
+  ownerId: number | null,
+  envAdminIds: string[],
+  user: { role?: string | null; active?: boolean | null } | null,
+): "admin" | "viewer" | "invalid" {
+  if (ownerId === null) return "invalid";
+  // 环境变量白名单始终有效,与登录准入的兜底逻辑保持一致
+  if (envAdminIds.includes(String(ownerId))) return "admin";
+  if (!user || user.active !== true) return "invalid";
+  return user.role === "admin" ? "admin" : "viewer";
+}
+
+/**
  * 校验 Authorization: Bearer <key>。
  *
  * 未认领(owner_id IS NULL)与已撤销都视为无效——匿名注册拿到的 key
@@ -77,9 +109,18 @@ export async function requireAgent(req: Request): Promise<Agent> {
     throw new AgentAuthError(401, "缺少 Authorization: Bearer <apiKey>");
   }
 
-  const { rows } = await query<Agent & { revoked_at: number | null }>(
-    `SELECT id, name, model, scopes, owner_id, revoked_at
-     FROM agents WHERE key_hash = $1`,
+  // 一次查询带出认领人的当前状态:权限要实时反映现状,不能停在授予那一刻
+  const { rows } = await query<
+    Agent & {
+      revoked_at: number | null;
+      owner_role: string | null;
+      owner_active: boolean | null;
+    }
+  >(
+    `SELECT a.id, a.name, a.model, a.scopes, a.owner_id, a.revoked_at,
+            u.role AS owner_role, u.active AS owner_active
+     FROM agents a LEFT JOIN users u ON u.id = a.owner_id
+     WHERE a.key_hash = $1`,
     [await hashKey(key)],
   );
   const agent = rows[0];
@@ -91,6 +132,18 @@ export async function requireAgent(req: Request): Promise<Agent> {
       "该 agent 尚未被认领:请把注册时返回的 claimUrl 交给你的人类主人,由其打开并完成认领",
     );
   }
+
+  const tier = ownerTier(agent.owner_id, envAllowedIds(), {
+    role: agent.owner_role,
+    active: agent.owner_active,
+  });
+  if (tier === "invalid") {
+    throw new AgentAuthError(
+      403,
+      "认领该 agent 的账号已被停用,agent 随之失效;请让新的管理员重新接入",
+    );
+  }
+  agent.scopes = effectiveScopes(agent.scopes, tier);
 
   // 不阻塞响应;失败不影响鉴权结果
   void query("UPDATE agents SET last_seen_at = $1 WHERE id = $2", [

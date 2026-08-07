@@ -9,6 +9,9 @@ export const dynamic = "force-dynamic";
 const ALLOWED_SCOPES = ["read", "trade", "watch"];
 
 export async function GET() {
+  // agent 管理数据对只读用户没有用途,一并收拢到管理员
+  const guard = await requireAdmin();
+  if ("denied" in guard) return guard.denied;
   const { rows } = await query(
     `SELECT id, name, model, description, key_prefix, scopes,
             owner_id, claimed_at, last_seen_at, revoked_at, created_at
