@@ -1,8 +1,12 @@
 #!/bin/sh
-# VPS 上执行:拉代码并重建重启(在 /opt/polyorders/app 目录运行)
+# 手动兜底:VPS 上现场 build 并重启(正常发布走 GitHub Actions + vps-release.sh)。
+# 适用于 Actions 不可用或需要部署未推送代码的紧急场景
 set -e
 cd "$(dirname "$0")/.."
 git pull --ff-only
+
+# 构建期 ISR 预渲染要连库,compose 的 database_url secret 从 shell 环境取值
+set -a; . ./.env; set +a
 docker compose -f docker-compose.vps.yml build
 
 # 在新镜像里跑测试。位置刻意排在迁移与重启之前:测试挂掉时数据库没被动过,

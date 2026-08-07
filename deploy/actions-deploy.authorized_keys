@@ -1,0 +1,1 @@
+restrict,command="/opt/polyorders/app/scripts/vps-release.sh" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPAKTFqagFhcYe5CgD3gapu1Ad9kw9NROEkwGFXjS5BH polyorders-actions-deploy

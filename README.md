@@ -11,8 +11,8 @@ Next.js 16 + React 19 + Tailwind 4 + PostgreSQL 17(pg 驱动)。
 - **VPS(Vultr icn,141.164.53.169)**:全 Docker——caddy(TLS)+ web(next start)+ scheduler(crond 定时抓取:live 每 2h、全量每日 UTC 02:00,失败发 Telegram 告警)
 - **Supabase(ap-northeast-2)**:线上数据库(裁剪数据)
 - **Cloudflare**:polyorders.bluesignals.cc,橙云代理
-- **GitHub Actions**:仅手动兜底(fetch / live workflow_dispatch)
-- 线上更新:`ssh vps` 后执行 `/opt/polyorders/app/scripts/vps-deploy.sh`
+- **CI/CD(GitHub Actions,deploy.yml)**:push main → typecheck+测试 → 构建镜像推 GHCR(app 与 scheduler 两个 target,tag 为 git 短 sha)→ SSH 触发 VPS 的 `scripts/vps-release.sh` 拉取切换。SSH 用专用密钥 + `authorized_keys` 强制命令(只能触发发布脚本);回滚 = 手动 dispatch 填旧 sha;GHCR 只保留最近 5 个版本
+- **手动兜底**:Actions 不可用时 `ssh vps` 后执行 `/opt/polyorders/app/scripts/vps-deploy.sh` 现场构建;fetch / live workflow_dispatch 仍保留为抓取兜底
 
 ## 本地开发(Docker)
 

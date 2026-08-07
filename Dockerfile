@@ -11,10 +11,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-# 首页 ISR 预渲染在构建期访问数据库
-ARG DATABASE_URL
-ENV DATABASE_URL=$DATABASE_URL
-RUN pnpm build && mkdir -p data /var/log/fetch
+# 首页 ISR 预渲染在构建期访问数据库。用 BuildKit secret 传入而非 ARG/ENV:
+# 镜像要推 GHCR,连接串(含密码)不能留在镜像元数据里;运行期由 env_file 提供
+RUN --mount=type=secret,id=database_url,env=DATABASE_URL \
+    pnpm build && mkdir -p data /var/log/fetch
 
 ENV NODE_ENV=production
 EXPOSE 3000

@@ -15,11 +15,13 @@ services:
       - web
 
   web:
+    # 正常发布走 GHCR 镜像(Actions 构建推送,vps-release.sh 拉取);
+    # build 仅供断网兜底的 vps-deploy.sh 现场构建,产物同名覆盖
+    image: ghcr.io/caiyin-bit/polyorders:${IMAGE_TAG:-latest}
     build:
       context: .
       target: app
-      args:
-        DATABASE_URL: ${DATABASE_URL}
+      secrets: [database_url]
     restart: unless-stopped
     env_file: .env
     environment:
@@ -31,11 +33,11 @@ services:
       - "127.0.0.1:3000:3000" # 仅本机调试用,外网入口走 caddy
 
   scheduler:
+    image: ghcr.io/caiyin-bit/polyorders-scheduler:${IMAGE_TAG:-latest}
     build:
       context: .
       target: scheduler
-      args:
-        DATABASE_URL: ${DATABASE_URL}
+      secrets: [database_url]
     restart: unless-stopped
     env_file: .env
     environment:
@@ -47,11 +49,11 @@ services:
   # RTDS 实时 watcher:常驻 WebSocket,关注池地址的秒级成交感知。
   # 与 scheduler 共用 app 镜像;5 分钟轮询仍是正确性兜底,此服务挂掉不影响数据完整性。
   watcher:
+    image: ghcr.io/caiyin-bit/polyorders:${IMAGE_TAG:-latest}
     build:
       context: .
       target: app
-      args:
-        DATABASE_URL: ${DATABASE_URL}
+      secrets: [database_url]
     restart: unless-stopped
     env_file: .env
     environment:
@@ -63,3 +65,9 @@ volumes:
   caddy_data:
   caddy_config:
   fetch_logs:
+
+# 构建期 ISR 预渲染要连库;从执行 compose 的 shell 环境取值
+# (vps-deploy.sh 会先 source .env),不进镜像元数据
+secrets:
+  database_url:
+    environment: DATABASE_URL
