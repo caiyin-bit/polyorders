@@ -48,6 +48,11 @@ export function inspectEnv(
     warn.push("TELEGRAM_ALERT_CHAT_ID 未配置,抓取失败与交易异常不会发出告警");
   }
 
+  // 缺 LLM 密钥不致命(点「分析」会得到明确的 503),但值得在部署时就知道
+  if (scope === "web" && !env.DEEPSEEK_API_KEY) {
+    warn.push("DEEPSEEK_API_KEY 未配置,钱包 AI 分析不可用");
+  }
+
   // 配了一半的 relayer 凭据不会生效,而现象是「Deposit Wallet 部署失败」,
   // 从报错很难联想到这里少了一个变量
   const relayerKey = Boolean(env.POLYMARKET_RELAYER_KEY);

@@ -49,6 +49,12 @@ export const TRADE_DAILY_MAX_USD_DEFAULT = 20;
 // 取 4% 作为缓冲——限额约束的应当是实际支出,宁可略严也不要超支。
 export const TRADE_FEE_BUFFER = 0.04;
 
+// LLM 直连 DeepSeek 官方 API(OpenAI 兼容协议),零依赖 fetch。
+// 注意官方 API 不提供钉版本的模型 ID:deepseek-v4-flash 会被原地升级
+// (当前指向 0731),上游升级可能改变输出分布,留意线上行为漂移。
+export const LLM_BASE_URL = "https://api.deepseek.com";
+export const LLM_MODEL_DEFAULT = "deepseek-v4-flash";
+
 // Agent 接入:注册端点必须匿名可调(agent 没有凭据),因此靠「未认领配额 +
 // 过期清理」限制滥用。选配额而非 IP 限速,是因为它不依赖内存状态,
 // 重启与多容器都成立。

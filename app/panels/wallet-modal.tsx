@@ -173,6 +173,31 @@ export function WalletModal({
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [copied, setCopied] = useState(false);
+  const [analysis, setAnalysis] = useState<{
+    content: string;
+    model: string;
+    usage: { promptTokens: number; completionTokens: number };
+  } | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisErr, setAnalysisErr] = useState<string | null>(null);
+
+  async function analyze() {
+    if (analyzing) return;
+    setAnalyzing(true);
+    setAnalysisErr(null);
+    try {
+      const r = await fetch(`/api/wallet/${address}/analyze`, {
+        method: "POST",
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+      setAnalysis(d);
+    } catch (err) {
+      setAnalysisErr(err instanceof Error ? err.message : "分析失败,请重试");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -268,13 +293,22 @@ export function WalletModal({
               </a>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="关闭"
-            className="ml-3 rounded border border-line px-2 py-1 text-sm text-ink2 hover:border-mut hover:text-ink"
-          >
-            ✕
-          </button>
+          <div className="ml-3 flex shrink-0 items-center gap-2">
+            <button
+              onClick={analyze}
+              disabled={analyzing || !detail}
+              className="rounded border border-accent/60 px-2.5 py-1 text-sm text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {analyzing ? "分析中…" : analysis ? "重新分析" : "✦ 分析"}
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="关闭"
+              className="rounded border border-line px-2 py-1 text-sm text-ink2 hover:border-mut hover:text-ink"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-5 lg:overflow-hidden">
@@ -291,6 +325,45 @@ export function WalletModal({
               </div>
             ))}
           </div>
+
+          {(analysis || analyzing || analysisErr) && (
+            <div className="mt-4 shrink-0 rounded border border-accent/30 bg-panel2 px-4 py-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-xs font-medium tracking-wide text-accent">
+                  AI 检视报告
+                </h3>
+                {analysis && (
+                  <button
+                    onClick={() => {
+                      setAnalysis(null);
+                      setAnalysisErr(null);
+                    }}
+                    className="text-[11px] text-mut hover:text-ink2"
+                  >
+                    收起
+                  </button>
+                )}
+              </div>
+              {analyzing ? (
+                <p className="text-xs text-mut">
+                  正在调用模型分析该地址的持仓、成交与历史盈亏,约需半分钟…
+                </p>
+              ) : analysisErr ? (
+                <p className="text-xs text-down-ink">{analysisErr}</p>
+              ) : analysis ? (
+                <>
+                  <div className="max-h-[38vh] overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-ink2">
+                    {analysis.content}
+                  </div>
+                  <div className="mt-2 border-t border-line/60 pt-1.5 font-mono text-[10px] text-mut">
+                    {analysis.model} · {analysis.usage.promptTokens} in /{" "}
+                    {analysis.usage.completionTokens} out ·
+                    仅供参考,不构成投资建议
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
 
           <div className="mt-5 grid grid-cols-1 gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
             <section className="min-h-0 lg:overflow-y-auto lg:pr-2">
