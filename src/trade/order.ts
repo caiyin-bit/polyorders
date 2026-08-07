@@ -19,6 +19,8 @@ export type OrderRequest = {
   limitPrice?: number;
   /** 限价单有效期:分钟数或 "30m"/"2h"/"1d";留空为挂到撤销为止(GTC) */
   expiresIn?: string | number;
+  /** 只做 maker:若会立即吃单则由交易所直接拒绝,用于规避吃单手续费 */
+  postOnly?: boolean;
   /** 第二期跟单时标记来源地址 */
   sourceAddress?: string;
   /** 由 agent 发起时记录是哪个 agent,便于审计 */
@@ -90,6 +92,22 @@ export function exposureUsd(args: {
  */
 export function spendUsd(exposure: number, side: "BUY" | "SELL"): number {
   return side === "BUY" ? exposure * (1 + TRADE_FEE_BUFFER) : exposure;
+}
+
+/**
+ * 参数组合校验;通过返回 null。
+ *
+ * post-only 配市价单是自相矛盾的:市价单必然吃单。这种情况必须报错而不是
+ * 静默忽略——静默忽略会让人以为拿到了"绝不吃单"的保护,实际却照吃不误。
+ */
+export function validateOrderShape(req: {
+  limitPrice?: number;
+  postOnly?: boolean;
+}): string | null {
+  if (req.postOnly && !req.limitPrice) {
+    return "post-only 只对限价单有效:市价单必然吃单,无法只做 maker";
+  }
+  return null;
 }
 
 type TradeClient = Awaited<ReturnType<typeof getTradeClient>>;
@@ -259,9 +277,11 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
     });
   }
 
-  // 有效期非法要在下单前拦住,别等交易所拒单
+  // 参数问题在下单前拦住,别等交易所拒单
   const parsed = parseDuration(req.expiresIn);
-  if ("error" in parsed) {
+  const shapeError =
+    "error" in parsed ? parsed.error : validateOrderShape(req);
+  if (shapeError) {
     return record({
       ...EMPTY,
       request: req,
@@ -269,10 +289,10 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
       tokenId,
       status: "failed",
       dryRun,
-      error: parsed.error,
+      error: shapeError,
     });
   }
-  const expiryMinutes = parsed.minutes;
+  const expiryMinutes = "minutes" in parsed ? parsed.minutes : 0;
 
   const tick = Number(market.trading.minimumTickSize ?? 0.01);
   const priceDecimals = decimalsForTick(tick);
@@ -352,6 +372,7 @@ export async function placeOrder(req: OrderRequest): Promise<OrderResult> {
         size,
         side,
         ...(expiration ? { expiration } : {}),
+        ...(req.postOnly ? { postOnly: true } : {}),
       };
       if (dryRun) {
         const signed = await client.createLimitOrder(params);

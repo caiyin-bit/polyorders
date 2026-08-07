@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       limitPrice: body.limitPrice ? Number(body.limitPrice) : undefined,
       // 分钟数或 "30m"/"2h"/"1d";仅对限价单有意义,解析与校验在 placeOrder 内
       expiresIn: body.expiresIn,
+      postOnly: body.postOnly === true,
       agentId,
     });
     return Response.json(result);

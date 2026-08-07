@@ -7,6 +7,7 @@ import {
   formatOrderAlert,
   roundTo,
   spendUsd,
+  validateOrderShape,
 } from "./order";
 
 describe("decimalsForTick:价格精度", () => {
@@ -197,5 +198,25 @@ describe("spendUsd:含手续费的支出", () => {
   it("缓冲后的支出用于风控,可能让贴着上限的单被拒", () => {
     // 名义 $4.9 在 $5 上限内,含费后超出——这正是这次修正要达到的效果
     assert.ok(spendUsd(4.9, "BUY") > 5);
+  });
+});
+
+describe("validateOrderShape:参数组合校验", () => {
+  it("限价单可以 post-only", () => {
+    assert.equal(validateOrderShape({ limitPrice: 0.5, postOnly: true }), null);
+  });
+
+  // 静默忽略会让人以为拿到了「绝不吃单」的保护,实际却照吃不误
+  it("市价单配 post-only 必须报错而非静默忽略", () => {
+    assert.match(
+      validateOrderShape({ postOnly: true }) ?? "",
+      /只对限价单有效/,
+    );
+  });
+
+  it("不带 post-only 的组合一律放行", () => {
+    assert.equal(validateOrderShape({}), null);
+    assert.equal(validateOrderShape({ limitPrice: 0.5 }), null);
+    assert.equal(validateOrderShape({ postOnly: false }), null);
   });
 });

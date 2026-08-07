@@ -63,6 +63,7 @@ export function TradePanel() {
   const [shares, setShares] = useState("");
   const [limitPrice, setLimitPrice] = useState("");
   const [expiresIn, setExpiresIn] = useState("");
+  const [postOnly, setPostOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -126,6 +127,7 @@ export function TradePanel() {
           shares: side === "SELL" ? Number(shares) : undefined,
           limitPrice: limitPrice ? Number(limitPrice) : undefined,
           expiresIn: expiresIn || undefined,
+          postOnly: postOnly || undefined,
         }),
       });
       const data = (await res.json()) as { error?: string };
@@ -244,6 +246,20 @@ export function TradePanel() {
             <option value="1d">1 天后过期</option>
             <option value="7d">7 天后过期</option>
           </select>
+        )}
+        {limitPrice && (
+          <label
+            className="flex items-center gap-1.5 text-[11px] text-mut"
+            title="若这笔单会立即吃掉对手盘,交易所直接拒绝而不是成交。用于确保只赚 maker 手续费"
+          >
+            <input
+              type="checkbox"
+              checked={postOnly}
+              onChange={(e) => setPostOnly(e.target.checked)}
+              disabled={MANUAL_TRADE_DISABLED}
+            />
+            只做 maker(post-only)
+          </label>
         )}
         <button
           onClick={submit}
