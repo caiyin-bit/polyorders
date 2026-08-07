@@ -366,7 +366,9 @@ export function WalletModal({
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 py-5 lg:overflow-hidden">
+        {/* 整页统一滚动:AI 报告加入后内容常态性超高,分区各自滚动会出现
+            三四个嵌套滚动条,不如让内容区作为唯一滚动容器 */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
           <div className="grid shrink-0 grid-cols-3 gap-2.5 sm:grid-cols-6">
             {stats.map((st) => (
               <div
@@ -415,7 +417,7 @@ export function WalletModal({
                 </p>
               ) : (
                 <>
-                  <div className="max-h-[38vh] overflow-y-auto overscroll-contain whitespace-pre-wrap text-xs leading-relaxed text-ink2">
+                  <div className="whitespace-pre-wrap text-xs leading-relaxed text-ink2">
                     {analysis.content}
                   </div>
                   <div className="mt-2 border-t border-line/60 pt-1.5 font-mono text-[10px] text-mut">
@@ -428,8 +430,8 @@ export function WalletModal({
             </div>
           )}
 
-          <div className="mt-5 grid grid-cols-1 gap-8 lg:min-h-0 lg:flex-1 lg:grid-cols-2">
-            <section className="min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
+          <div className="mt-5 grid grid-cols-1 gap-8 lg:grid-cols-2">
+            <section className="min-w-0 lg:pr-2">
               <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
                 最新动向
               </h3>
@@ -507,7 +509,7 @@ export function WalletModal({
               </div>
             </section>
 
-            <section className="min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
+            <section className="min-w-0 lg:pr-2">
               <h3 className="mb-2 text-xs font-medium tracking-wide text-ink2">
                 已平仓
                 <span className="ml-2 font-mono font-normal text-mut">
