@@ -23,22 +23,28 @@ export async function GET(req: Request) {
 
 async function mutate(
   req: Request,
-  action: (address: string) => Promise<string | null>,
+  action: (address: string, username: string | null) => Promise<string | null>,
 ) {
   try {
     const agent = await requireAgent(req);
     requireScope(agent, "watch");
 
     let raw: unknown;
+    let username: string | null = null;
     try {
-      raw = ((await req.json()) as { address?: unknown }).address;
+      const body = (await req.json()) as { address?: unknown; username?: unknown };
+      raw = body.address;
+      // 榜单外地址的显示名回填 candidates 用,与人类面板入口同款(可选)
+      if (typeof body.username === "string" && body.username.trim()) {
+        username = body.username.trim().slice(0, 100);
+      }
     } catch {}
     const address = normalizeAddress(raw);
     if (!address) {
       return Response.json({ error: "地址格式不合法" }, { status: 400 });
     }
 
-    const failure = await action(address);
+    const failure = await action(address, username);
     if (failure) return Response.json({ error: failure }, { status: 409 });
     return Response.json({ ok: true, address, ...(await watchlistView()) });
   } catch (err) {
@@ -47,7 +53,9 @@ async function mutate(
 }
 
 export function POST(req: Request) {
-  return mutate(req, addToWatchlist);
+  return mutate(req, (address, username) =>
+    addToWatchlist(address, undefined, username),
+  );
 }
 
 export function DELETE(req: Request) {

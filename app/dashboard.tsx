@@ -180,6 +180,27 @@ export default function Dashboard({
     [watch],
   );
 
+  const addWatch = useCallback(
+    async (address: string, username: string | null) => {
+      setWatchError(null);
+      try {
+        const res = await fetch("/api/watchlist", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ address, username }),
+        });
+        if (!res.ok) {
+          const data = (await res.json()) as { error?: string };
+          setWatchError(data.error ?? "添加失败");
+        }
+      } catch (err) {
+        setWatchError(String(err));
+      }
+      await loadWatch();
+    },
+    [loadWatch],
+  );
+
   const toggleWatch = useCallback(
     async (address: string) => {
       setWatchError(null);
@@ -353,6 +374,7 @@ export default function Dashboard({
           watcher={watcher}
           onRemove={toggleWatch}
           onOpen={() => setWatchOpen(true)}
+          onAdd={addWatch}
         />
         <PortfolioPanel />
         <TradePanel />

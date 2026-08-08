@@ -31,7 +31,7 @@ export const COPY_ORDER_USD = 2;
 export const COPY_DAILY_MAX_USD_DEFAULT = 10;
 
 // 实时关注池:小池子才支撑得起 5 分钟级高频定向拉取
-export const WATCH_POOL_LIMIT = 5;
+export const WATCH_POOL_LIMIT = 10;
 
 // RTDS 实时 watcher。全平台成交流约 28 条/秒,只有命中关注池的才落库。
 // 大额成交推 Telegram;冷却按地址生效,避免连续成交刷屏。
