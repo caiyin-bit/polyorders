@@ -1,5 +1,6 @@
 import { WATCH_POOL_LIMIT } from "./config";
 import { query } from "./db";
+import { backfillManualAddress } from "./fetch/manual";
 import { fetchJson } from "./http";
 
 // 关注池的增删查。人类面板与 agent 端点共用,池子上限只在这里判一次。
@@ -180,6 +181,9 @@ export async function addToWatchlist(
      ON CONFLICT (address) DO NOTHING`,
     [address, Date.now(), addedBy ?? null],
   );
+  // 榜单外地址后台回填(拉平仓仓位+算评分行),让它以「精选」出现在
+  // 入围列表;榜单内地址已有评分行,回填自会跳过。不阻塞本次请求
+  void backfillManualAddress(address);
   return null;
 }
 

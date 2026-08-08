@@ -28,12 +28,15 @@ export default async function HomePage() {
          (SELECT COALESCE(SUM(total_positions), 0)::int FROM scores) AS closed_positions,
          (SELECT COUNT(*)::int FROM scores WHERE rank IS NOT NULL) AS qualified`,
     ),
+    // 正式入围(rank 非空)+ 手动关注的榜单外地址(rank 空,置顶「精选」)
     query<Omit<LeaderRow, "spark">>(
       `SELECT s.address, c.username, s.total_positions, s.winning_positions,
-              s.win_rate, s.total_realized_pnl, s.avg_pnl, s.score, s.rank
+              s.win_rate, s.total_realized_pnl, s.avg_pnl, s.score, s.rank,
+              (s.rank IS NULL) AS pinned
        FROM scores s LEFT JOIN candidates c ON c.address = s.address
        WHERE s.rank IS NOT NULL
-       ORDER BY s.rank`,
+          OR s.address IN (SELECT address FROM watchlist)
+       ORDER BY (s.rank IS NULL) DESC, s.rank`,
     ),
     query<{ address: string; realized_pnl: number }>(
       `SELECT s.address, sp.realized_pnl
@@ -46,6 +49,7 @@ export default async function HomePage() {
          LIMIT 24
        ) sp
        WHERE s.rank IS NOT NULL
+          OR s.address IN (SELECT address FROM watchlist)
        ORDER BY s.address, sp."timestamp" ASC`,
     ),
     query<FeedTrade>(
@@ -61,6 +65,7 @@ export default async function HomePage() {
          LIMIT 3
        ) t
        WHERE s.rank <= $1
+          OR (s.rank IS NULL AND s.address IN (SELECT address FROM watchlist))
        ORDER BY s.rank, t."timestamp" DESC`,
       [TOP_N],
     ),

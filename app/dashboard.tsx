@@ -254,9 +254,15 @@ export default function Dashboard({
     });
     const dir = sortAsc ? 1 : -1;
     out = [...out].sort((a, b) => {
+      // 精选行永远置顶,不参与用户排序
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       const av = a[sortKey] ?? -Infinity;
       const bv = b[sortKey] ?? -Infinity;
-      return av === bv ? a.rank - b.rank : av < bv ? -dir : dir;
+      return av === bv
+        ? (a.rank ?? Infinity) - (b.rank ?? Infinity)
+        : av < bv
+          ? -dir
+          : dir;
     });
     return out;
   }, [rows, search, minWinRate, minPositions, sortKey, sortAsc]);
@@ -472,7 +478,7 @@ export default function Dashboard({
             </thead>
             <tbody>
               {visible.map((r) => {
-                const isTop = r.rank <= config.topN;
+                const isTop = r.rank !== null && r.rank <= config.topN;
                 const trades = feedByAddr.get(r.address);
                 // 有动向行时,柱状图单元格纵跨两行,在合并区域内居中
                 const hasFeed = Boolean(trades && trades.length > 0);
@@ -483,15 +489,24 @@ export default function Dashboard({
                       className="cursor-pointer border-t border-line/60 first:border-t-0 hover:bg-panel2"
                     >
                       <td className="py-1.5 pl-4 pr-2">
-                        <span
-                          className={`font-mono tabular-nums ${
-                            // 入选标记用主色:它表达「被选中」而非「上涨」,
-                            // 跟着涨跌配色翻转毫无意义
-                            isTop ? "font-semibold text-accent" : "text-mut"
-                          }`}
-                        >
-                          {r.rank}
-                        </span>
+                        {r.pinned ? (
+                          <span
+                            className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+                            title="手动加入关注池的账号;评分达标后会在次日全量重算中获得正式名次"
+                          >
+                            精选
+                          </span>
+                        ) : (
+                          <span
+                            className={`font-mono tabular-nums ${
+                              // 入选标记用主色:它表达「被选中」而非「上涨」,
+                              // 跟着涨跌配色翻转毫无意义
+                              isTop ? "font-semibold text-accent" : "text-mut"
+                            }`}
+                          >
+                            {r.rank}
+                          </span>
+                        )}
                       </td>
                       <td className="max-w-52 py-1.5 pr-3">
                         <div className="flex items-baseline gap-2">
@@ -536,7 +551,7 @@ export default function Dashboard({
                         <Pnl value={r.avg_pnl} />
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums text-ink2">
-                        {r.score.toFixed(3)}
+                        {r.score !== null ? r.score.toFixed(3) : "-"}
                       </td>
                       <td className="py-1.5 pr-3 text-[11px]">
                         <RatingCell

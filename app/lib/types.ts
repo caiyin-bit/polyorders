@@ -8,8 +8,11 @@ export type LeaderRow = {
   win_rate: number;
   total_realized_pnl: number | null;
   avg_pnl: number | null;
-  score: number;
-  rank: number;
+  score: number | null;
+  /** 手动关注的榜单外地址无名次;次日全量重算若达标会获得正式 rank */
+  rank: number | null;
+  /** 手动加入关注池的榜单外地址:置顶并标「精选」 */
+  pinned: boolean;
   spark: number[];
 };
 

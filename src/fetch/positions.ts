@@ -53,6 +53,37 @@ async function insertPage(address: string, items: ClosedPosition[]) {
   );
 }
 
+/** 拉单个地址的全部已平仓仓位(受评分上限熔断),完成后盖抓取时间戳 */
+export async function fetchClosedPositionsFor(
+  address: string,
+  limiter: ReturnType<typeof createLimiter>,
+): Promise<number> {
+  let rows = 0;
+  for (let offset = 0; offset < MAX_OFFSET; offset += PAGE_SIZE) {
+    const page = await limiter(() =>
+      fetchJson<ClosedPosition[]>(
+        `${DATA_API}/closed-positions?user=${address}&limit=${PAGE_SIZE}&offset=${offset}&sortBy=TIMESTAMP&sortDirection=DESC`,
+      ),
+    );
+    if (page.length === 0) break;
+    await insertPage(address, page);
+    rows += page.length;
+    if (rows % 5000 === 0) {
+      console.log(`positions: ${address.slice(0, 10)}… ${rows} rows so far`);
+    }
+    if (page.length < PAGE_SIZE) break;
+    if (rows >= MAX_OFFSET) {
+      console.log(`positions: ${address.slice(0, 10)}… 截断于 ${rows} 行(≥评分上限)`);
+      break;
+    }
+  }
+  await query(
+    "UPDATE candidates SET positions_fetched_at = $1 WHERE address = $2",
+    [Date.now(), address],
+  );
+  return rows;
+}
+
 export async function fetchPositions(
   force = false,
   max?: number,
@@ -75,36 +106,9 @@ export async function fetchPositions(
   let failed = 0;
   let done = 0;
 
-  async function fetchAddress(address: string): Promise<number> {
-    let rows = 0;
-    for (let offset = 0; offset < MAX_OFFSET; offset += PAGE_SIZE) {
-      const page = await limiter(() =>
-        fetchJson<ClosedPosition[]>(
-          `${DATA_API}/closed-positions?user=${address}&limit=${PAGE_SIZE}&offset=${offset}&sortBy=TIMESTAMP&sortDirection=DESC`,
-        ),
-      );
-      if (page.length === 0) break;
-      await insertPage(address, page);
-      rows += page.length;
-      if (rows % 5000 === 0) {
-        console.log(`positions: ${address.slice(0, 10)}… ${rows} rows so far`);
-      }
-      if (page.length < PAGE_SIZE) break;
-      if (rows >= MAX_OFFSET) {
-        console.log(`positions: ${address.slice(0, 10)}… 截断于 ${rows} 行(≥评分上限)`);
-        break;
-      }
-    }
-    await query(
-      "UPDATE candidates SET positions_fetched_at = $1 WHERE address = $2",
-      [Date.now(), address],
-    );
-    return rows;
-  }
-
   await Promise.all(
     targets.map(({ address }) =>
-      fetchAddress(address)
+      fetchClosedPositionsFor(address, limiter)
         .then((rows) => {
           ok++;
           done++;
