@@ -99,6 +99,20 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
     inUsdPerM: 0.11,
     outUsdPerM: 0.9,
   },
+  // ¥6 / ¥24 每百万,按 7.1 折美元。GLM-5.2 已上线但未公布定价,先钉 5.1
+  glm: {
+    provider: "siliconflow",
+    model: "Pro/zai-org/GLM-5.1",
+    inUsdPerM: 0.85,
+    outUsdPerM: 3.38,
+  },
+  // 编码特化版(通用版 K2.6 未公布定价);官网美元价
+  kimi: {
+    provider: "siliconflow",
+    model: "moonshotai/Kimi-K2.7-Code",
+    inUsdPerM: 0.86,
+    outUsdPerM: 3.8,
+  },
 };
 export const LLM_DEFAULT_MODEL = "deepseek-v4-flash";
 // 日预算与并发:对齐交易风控的哲学,默认取保守值,宁可分析停摆不可账单失控
