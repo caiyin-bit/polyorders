@@ -109,21 +109,35 @@ function RatingCell({ item }: { item: RatingItem | undefined }) {
     return <span className="text-mut">-</span>;
   if (item.status === "running")
     return <span className="text-mut">分析中…</span>;
-  if (item.status === "error" || !item.rating)
+  if (item.status === "error" || (!item.rating && !item.members?.length))
     return <span className="text-down-ink">失败</span>;
+
+  // 交叉分析的标签按成员多数票展示(1观望+3值得关注 → 值得关注);
+  // 并列最高票(如 2:2)则并排展示全部并列档。members 已按谨慎档排序,
+  // 综合器的保守裁决仍保留在理由与完整报告里,列表标签反映的是票型
+  const maxVotes = item.members?.length
+    ? Math.max(...item.members.map((m) => m.count))
+    : 0;
+  const badges = item.members?.length
+    ? item.members.filter((m) => m.count === maxVotes).map((m) => m.rating)
+    : [item.rating as string];
+
   return (
     <div className="min-w-0">
-      <span
-        className={`rounded px-1.5 py-px text-[10px] font-semibold ${
-          RATING_STYLE[item.rating] ?? "bg-panel2 text-ink2"
-        }`}
-      >
-        {item.rating}
-      </span>
+      {badges.map((b) => (
+        <span
+          key={b}
+          className={`mr-1 rounded px-1.5 py-px text-[10px] font-semibold ${
+            RATING_STYLE[b] ?? "bg-panel2 text-ink2"
+          }`}
+        >
+          {b}
+        </span>
+      ))}
       {item.members && item.members.length > 0 && (
         <span
           title="交叉分析中各模型的独立评级计数"
-          className="ml-1.5 font-mono text-[10px] text-mut"
+          className="font-mono text-[10px] text-mut"
         >
           {item.members.map((m) => `${m.count}${m.rating}`).join("+")}
         </span>
