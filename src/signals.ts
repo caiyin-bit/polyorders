@@ -180,6 +180,22 @@ export const HORIZON_MS: Record<string, number> = {
   "24h": 86_400_000,
 };
 
+/** 观测点到期后的重试宽限窗:超过这个窗还取不到历史价,视为市场已下线 */
+export const MARK_SEAL_GRACE_MS = 86_400_000;
+
+/**
+ * 取不到价时是否记 NULL 封存(纯函数,供测试)。
+ * 宽限窗内留给下轮重试;过窗必须封存——否则死信号永远占住
+ * 扫描批次头部,饿死后面所有新信号(2026-08-08 线上真实发生过)。
+ */
+export function shouldSealNull(
+  horizon: string,
+  detectedAt: number,
+  now: number,
+): boolean {
+  return now >= detectedAt + HORIZON_MS[horizon] + MARK_SEAL_GRACE_MS;
+}
+
 /** 到期且尚未标记的观测点(纯函数,供测试) */
 export function dueHorizons(
   detectedAt: number,

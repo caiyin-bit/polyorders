@@ -7,7 +7,7 @@ import { getPool, query } from "../src/db";
 import { assertEnv } from "../src/env";
 import { fetchJson } from "../src/http";
 import { createLimiter } from "../src/http";
-import { dueHorizons, HORIZON_MS, priceAt } from "../src/signals";
+import { dueHorizons, HORIZON_MS, priceAt, shouldSealNull } from "../src/signals";
 
 assertEnv("worker");
 
@@ -46,8 +46,8 @@ async function markPriceHorizons(limiter: ReturnType<typeof createLimiter>) {
         const existing = new Set(r.marked ?? []);
         for (const h of dueHorizons(r.detected_at, now, existing)) {
           const price = await priceAt(r.asset!, r.detected_at + HORIZON_MS[h]);
-          // 24h 到了还取不到价,说明市场已下线,记 NULL 封存;更早的观测点留给下轮重试
-          if (price === null && h !== "24h") continue;
+          // 取不到价:宽限窗内留给下轮重试,过窗记 NULL 封存(市场已下线)
+          if (price === null && !shouldSealNull(h, r.detected_at, now)) continue;
           await query(
             `INSERT INTO signal_marks (signal_id, horizon, price, marked_at)
              VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
