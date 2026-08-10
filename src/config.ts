@@ -96,6 +96,14 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
     inUsdPerM: 0.1,
     outUsdPerM: 0.6,
   },
+  // 实测强制推理不可关思考(OpenRouter 端点默认 high 档,调用务必显式限档)
+  grok: {
+    provider: "openrouter",
+    model: "x-ai/grok-4.5",
+    inUsdPerM: 2,
+    outUsdPerM: 6,
+    alwaysReasoning: true,
+  },
   // Qwen 旗舰,OpenRouter 接入(硅基流动未上架 3.8 系列)。
   // 实测同 gemini:强制推理不可关思考
   "qwen-max": {
@@ -128,9 +136,9 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
   },
 };
 export const LLM_DEFAULT_MODEL = "deepseek-v4-flash";
-// 交叉分析的成员模型:刻意选三家不同厂商(深度求索/阿里/智谱),
+// 交叉分析的成员模型:刻意选三家不同厂商(深度求索/阿里/xAI),
 // 同厂模型的盲区高度相关,跨厂才有真分歧。综合器用默认主力模型
-export const LLM_CROSS_MODELS = ["deepseek-v4-flash", "qwen-max", "glm"];
+export const LLM_CROSS_MODELS = ["deepseek-v4-flash", "qwen-max", "grok"];
 // 日预算与并发:对齐交易风控的哲学,默认取保守值,宁可分析停摆不可账单失控
 export const LLM_DAILY_MAX_USD_DEFAULT = 2;
 export const LLM_CONCURRENCY = 3;
