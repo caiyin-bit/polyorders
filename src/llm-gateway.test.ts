@@ -70,6 +70,12 @@ describe("buildRequestBody:供应商参数方言", () => {
     assert.equal(med.model, "Qwen/Qwen3.5-122B-A10B");
   });
 
+  it("强制推理模型:none 自动降为最低档而非发出会 400 的关思考请求", () => {
+    const GF = LLM_MODELS["gemini-flash"];
+    const b = buildRequestBody(GF, req({ reasoning: "none" }));
+    assert.deepEqual(b.reasoning, { effort: "low" });
+  });
+
   it("省略 reasoning 时不带任何推理参数(走模型默认)", () => {
     const b = buildRequestBody(DS, req());
     assert.equal("thinking" in b, false);

@@ -124,23 +124,26 @@ export function buildRequestBody(
     ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
   };
   if (req.reasoning === undefined) return base;
+  // 强制推理的模型不接受关思考,静默降为最低档比让调用方 400 更有用
+  const reasoning =
+    req.reasoning === "none" && spec.alwaysReasoning ? "low" : req.reasoning;
   if (spec.provider === "deepseek") {
-    return req.reasoning === "none"
+    return reasoning === "none"
       ? { ...base, thinking: { type: "disabled" } }
-      : { ...base, reasoning_effort: req.reasoning };
+      : { ...base, reasoning_effort: reasoning };
   }
   if (spec.provider === "siliconflow") {
-    return req.reasoning === "none"
+    return reasoning === "none"
       ? { ...base, enable_thinking: false }
       : {
           ...base,
           enable_thinking: true,
-          thinking_budget: SF_THINKING_BUDGET[req.reasoning],
+          thinking_budget: SF_THINKING_BUDGET[reasoning],
         };
   }
-  return req.reasoning === "none"
+  return reasoning === "none"
     ? { ...base, reasoning: { enabled: false } }
-    : { ...base, reasoning: { effort: req.reasoning } };
+    : { ...base, reasoning: { effort: reasoning } };
 }
 
 function envNumber(name: string, fallback: number): number {

@@ -66,6 +66,8 @@ export type LlmModelSpec = {
   model: string;
   inUsdPerM: number;
   outUsdPerM: number;
+  /** 强制推理的模型(实测关思考直接 400),reasoning:"none" 自动降为最低档 */
+  alwaysReasoning?: boolean;
 };
 export const LLM_MODELS: Record<string, LlmModelSpec> = {
   "deepseek-v4-flash": {
@@ -85,6 +87,8 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
     model: "google/gemini-3.6-flash",
     inUsdPerM: 1.5,
     outUsdPerM: 7.5,
+    // 实测:该端点 "Reasoning is mandatory ... cannot be disabled"
+    alwaysReasoning: true,
   },
   "gpt-mini": {
     provider: "openrouter",
