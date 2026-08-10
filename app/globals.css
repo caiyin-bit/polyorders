@@ -76,6 +76,29 @@
   --funnel-5: #1c5cab;
 }
 
+/* Toast 入场:自上滑入。没有动画时,同一位置的新旧提示瞬间跳变,
+   用户看不出「又来了一条」。 */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.toast-in {
+  animation: toast-in 0.15s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-in {
+    animation: none;
+  }
+}
+
 /* 红涨绿跌(中港台习惯)。只交换语义映射,调色板本身不动,
    因此深浅色下各自的提亮/加深都自动跟随。必须放在 :root 与 .dark 之后:
    三者特异性相同,靠书写顺序决胜。 */

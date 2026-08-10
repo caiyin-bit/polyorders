@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/app/components/toast";
 import { fmtAgo } from "@/app/lib/format";
 import { useCallback, useEffect, useState } from "react";
 
@@ -25,13 +26,13 @@ type AccessReq = {
 type AccessView = { pending: AccessReq[]; active: AccessReq[] };
 
 export function UsersPanel() {
+  const toast = useToast();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [me, setMe] = useState<{ id: number; role: string } | null>(null);
   const [envAdmins, setEnvAdmins] = useState<string[]>([]);
   const [access, setAccess] = useState<AccessView | null>(null);
   const [newId, setNewId] = useState("");
   const [newRole, setNewRole] = useState<"viewer" | "admin">("viewer");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -58,7 +59,6 @@ export function UsersPanel() {
 
   async function mutate(method: "POST" | "DELETE", body: unknown) {
     setBusy(true);
-    setError(null);
     try {
       const res = await fetch("/api/users", {
         method,
@@ -70,13 +70,14 @@ export function UsersPanel() {
         users?: UserRow[];
         access?: AccessView;
       };
-      if (!res.ok) setError(data.error ?? "操作失败");
+      if (!res.ok) toast.error(data.error ?? "操作失败");
       else {
         if (data.users) setUsers(data.users);
         if (data.access) setAccess(data.access);
+        toast.success("操作已生效");
       }
     } catch (err) {
-      setError(String(err));
+      toast.error(String(err));
     } finally {
       setBusy(false);
     }
@@ -280,7 +281,6 @@ export function UsersPanel() {
         </div>
       )}
 
-      {error && <p className="mt-2 text-[11px] text-bad-ink">{error}</p>}
     </section>
   );
 }

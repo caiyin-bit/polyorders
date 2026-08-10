@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/app/components/toast";
 import { fmtAgo, shortAddr } from "@/app/lib/format";
 import { useState } from "react";
 
@@ -60,9 +61,9 @@ function AddWatchForm({
   onAdd: (address: string, username: string | null) => Promise<void>;
   full: boolean;
 }) {
+  const toast = useToast();
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<WatchCandidate[] | null>(null);
 
   async function pick(c: WatchCandidate) {
@@ -71,7 +72,6 @@ function AddWatchForm({
       await onAdd(c.address, c.username);
       setInput("");
       setCandidates(null);
-      setErr(null);
     } finally {
       setBusy(false);
     }
@@ -81,7 +81,6 @@ function AddWatchForm({
     const q = input.trim();
     if (!q || busy) return;
     setBusy(true);
-    setErr(null);
     setCandidates(null);
     try {
       const res = await fetch(`/api/watchlist/resolve?q=${encodeURIComponent(q)}`);
@@ -90,7 +89,7 @@ function AddWatchForm({
         error?: string;
       };
       if (!res.ok || !d.candidates) {
-        setErr(d.error ?? "解析失败");
+        toast.error(d.error ?? "解析失败");
         return;
       }
       if (d.candidates.length === 1) {
@@ -99,7 +98,7 @@ function AddWatchForm({
         setCandidates(d.candidates);
       }
     } catch (e) {
-      setErr(String(e));
+      toast.error(String(e));
     } finally {
       setBusy(false);
     }
@@ -116,7 +115,7 @@ function AddWatchForm({
             if (e.key === "Enter") void submit();
           }}
           disabled={full || busy}
-          placeholder={full ? "关注池已满" : "地址 / 主页链接 / 用户名"}
+          placeholder={full ? "关注池已满,请先移除" : "地址 / 主页链接 / 用户名"}
           className="min-w-0 flex-1 rounded border border-line bg-panel2 px-2 py-1 text-[11px] placeholder:text-mut/60 focus:border-mut focus:outline-none disabled:opacity-50"
         />
         <button
@@ -127,7 +126,6 @@ function AddWatchForm({
           {busy ? "…" : "添加"}
         </button>
       </div>
-      {err && <p className="mt-1.5 text-[11px] text-bad-ink">{err}</p>}
       {candidates && (
         <ul className="mt-1.5 space-y-1">
           <li className="text-[10px] text-mut">找到多个账号,点选要关注的:</li>
@@ -154,7 +152,6 @@ function AddWatchForm({
 export function WatchPanel({
   watch,
   limit,
-  error,
   watcher,
   onRemove,
   onOpen,
@@ -162,13 +159,13 @@ export function WatchPanel({
 }: {
   watch: WatchRow[];
   limit: number;
-  error: string | null;
   watcher: WatcherState | null;
   onRemove: (address: string) => void;
   onOpen: () => void;
   onAdd: (address: string, username: string | null) => Promise<void>;
 }) {
   const live = watcher?.live ?? false;
+  const full = watch.length >= limit;
   return (
     <section
       onClick={onOpen}
@@ -178,7 +175,11 @@ export function WatchPanel({
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-xs font-medium tracking-wide text-ink2">
           实时关注
-          <span className="ml-2 font-mono tabular-nums text-mut">
+          {/* 满员时计数变红:提示弹过就没了,常驻的这一处才是「为什么加不进去」的答案 */}
+          <span
+            className={`ml-2 font-mono tabular-nums ${full ? "text-bad-ink" : "text-mut"}`}
+            title={full ? `关注池已满(上限 ${limit} 个),请先移除一个` : undefined}
+          >
             {watch.length}/{limit}
           </span>
           <span className="ml-2 font-normal text-mut/70">详情 →</span>
@@ -248,9 +249,7 @@ export function WatchPanel({
         </ul>
       )}
 
-      <AddWatchForm onAdd={onAdd} full={watch.length >= limit} />
-
-      {error && <p className="mt-2 text-[11px] text-bad-ink">{error}</p>}
+      <AddWatchForm onAdd={onAdd} full={full} />
     </section>
   );
 }

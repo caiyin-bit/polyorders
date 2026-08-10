@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/app/components/toast";
 import { fmtUsd } from "@/app/lib/format";
 import { useCallback, useEffect, useState } from "react";
 
@@ -56,6 +57,7 @@ export const ORDER_STATUS: Record<string, { label: string; cls: string }> = {
 const MANUAL_TRADE_DISABLED = true;
 
 export function TradePanel() {
+  const toast = useToast();
   const [market, setMarket] = useState("");
   const [outcome, setOutcome] = useState<"yes" | "no">("yes");
   const [side, setSide] = useState<"BUY" | "SELL">("BUY");
@@ -65,7 +67,6 @@ export function TradePanel() {
   const [expiresIn, setExpiresIn] = useState("");
   const [postOnly, setPostOnly] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [limits, setLimits] = useState<TradeLimits | null>(null);
   const [open, setOpen] = useState<OpenOrderRow[]>([]);
@@ -89,7 +90,6 @@ export function TradePanel() {
 
   async function cancel(id: number) {
     setCanceling(id);
-    setError(null);
     try {
       const res = await fetch("/api/trade", {
         method: "DELETE",
@@ -97,10 +97,11 @@ export function TradePanel() {
         body: JSON.stringify({ id }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) setError(data.error ?? "撤单失败");
+      if (!res.ok) toast.error(data.error ?? "撤单失败");
+      else toast.success("已撤单");
       await load();
     } catch (err) {
-      setError(String(err));
+      toast.error(String(err));
     } finally {
       setCanceling(null);
     }
@@ -114,7 +115,6 @@ export function TradePanel() {
     // 防御性:按钮已禁用,这里再挡一道,免得以后改动只解开按钮却漏了这里
     if (MANUAL_TRADE_DISABLED) return;
     setBusy(true);
-    setError(null);
     try {
       const res = await fetch("/api/trade", {
         method: "POST",
@@ -131,10 +131,11 @@ export function TradePanel() {
         }),
       });
       const data = (await res.json()) as { error?: string };
-      if (!res.ok) setError(data.error ?? "下单失败");
+      if (!res.ok) toast.error(data.error ?? "下单失败");
+      else toast.success("已提交下单");
       await load();
     } catch (err) {
-      setError(String(err));
+      toast.error(String(err));
     } finally {
       setBusy(false);
     }
@@ -341,7 +342,6 @@ export function TradePanel() {
         </div>
       )}
 
-      {error && <p className="mt-2 text-[11px] text-bad-ink">{error}</p>}
 
       {orders.length > 0 && (
         <ul className="mt-3 space-y-1.5 border-t border-line pt-3">

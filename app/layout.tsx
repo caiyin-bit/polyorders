@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { ToastProvider } from "@/app/components/toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,7 +21,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
       </head>
-      <body className="min-h-screen bg-bg text-ink antialiased">{children}</body>
+      <body className="min-h-screen bg-bg text-ink antialiased">
+        {/* 挂在根布局:登录页等 (main) 之外的页面也能用同一套提示 */}
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

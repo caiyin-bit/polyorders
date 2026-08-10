@@ -1,5 +1,6 @@
 "use client";
 
+import { useToast } from "@/app/components/toast";
 import { type FetchStatus } from "@/app/lib/types";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -71,8 +72,8 @@ function sessionKind(kind: string): { label: string; hint: string } {
 
 export function PipelinePanel() {
   const router = useRouter();
+  const toast = useToast();
   const [status, setStatus] = useState<FetchStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const running = status?.running ?? false;
   const canRun = status?.canRun;
@@ -109,24 +110,24 @@ export function PipelinePanel() {
   }, [running, poll]);
 
   async function start() {
-    setError(null);
     try {
       const res = await fetch("/api/fetch", { method: "POST" });
       if (res.ok) {
+        toast.success("抓取已启动");
         await poll();
         return;
       }
       if (res.status === 409) {
-        setError("已有抓取进程在运行");
+        toast.error("已有抓取进程在运行");
         return;
       }
       // 501:线上环境无常驻进程,抓取由 GitHub Actions 定时执行
       const body = (await res.json().catch(() => null)) as {
         reason?: string;
       } | null;
-      setError(body?.reason ?? `启动失败(HTTP ${res.status})`);
+      toast.error(body?.reason ?? `启动失败(HTTP ${res.status})`);
     } catch {
-      setError("启动失败");
+      toast.error("启动失败");
     }
   }
 
@@ -189,8 +190,7 @@ export function PipelinePanel() {
           {running ? "RUNNING" : "RUN"}
         </button>
       </div>
-      {error && <p className="mb-2 text-[11px] text-bad-ink">{error}</p>}
-      {canRun === false && !error && (
+      {canRun === false && (
         <p className="mb-2 text-[11px] text-mut">
           线上由 GitHub Actions 定时抓取(每日全量 · 每 2 小时动向)
         </p>

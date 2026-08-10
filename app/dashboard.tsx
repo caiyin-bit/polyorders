@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pnl, Spark } from "@/app/components/bits";
+import { useToast } from "@/app/components/toast";
 import { fmtPct, shortAddr } from "@/app/lib/format";
 import { type Config, type FeedTrade, type Funnel, type LeaderRow } from "@/app/lib/types";
 import { AgentPanel } from "@/app/panels/agent";
@@ -136,6 +137,7 @@ export default function Dashboard({
   feed: FeedTrade[];
   config: Config;
 }) {
+  const toast = useToast();
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortAsc, setSortAsc] = useState(true);
   const [search, setSearch] = useState("");
@@ -146,11 +148,9 @@ export default function Dashboard({
   const [selected, setSelected] = useState<string | null>(null);
   const [watch, setWatch] = useState<WatchRow[]>([]);
   const [watchLimit, setWatchLimit] = useState(5);
-  const [watchError, setWatchError] = useState<string | null>(null);
   const [watcher, setWatcher] = useState<WatcherState | null>(null);
   const [watchOpen, setWatchOpen] = useState(false);
   const [ratings, setRatings] = useState<Map<string, RatingItem>>(new Map());
-  const [batchMsg, setBatchMsg] = useState<string | null>(null);
 
   const loadWatch = useCallback(async () => {
     try {
@@ -182,7 +182,6 @@ export default function Dashboard({
 
   const addWatch = useCallback(
     async (address: string, username: string | null) => {
-      setWatchError(null);
       try {
         const res = await fetch("/api/watchlist", {
           method: "POST",
@@ -191,19 +190,20 @@ export default function Dashboard({
         });
         if (!res.ok) {
           const data = (await res.json()) as { error?: string };
-          setWatchError(data.error ?? "添加失败");
+          toast.error(data.error ?? "添加失败");
+        } else {
+          toast.success(`已加入关注池 ${shortAddr(address)}`);
         }
       } catch (err) {
-        setWatchError(String(err));
+        toast.error(String(err));
       }
       await loadWatch();
     },
-    [loadWatch],
+    [loadWatch, toast],
   );
 
   const toggleWatch = useCallback(
     async (address: string) => {
-      setWatchError(null);
       const isWatched = watchedSet.has(address.toLowerCase());
       try {
         const res = await fetch("/api/watchlist", {
@@ -213,14 +213,19 @@ export default function Dashboard({
         });
         if (!res.ok) {
           const data = (await res.json()) as { error?: string };
-          setWatchError(data.error ?? "操作失败");
+          toast.error(data.error ?? "操作失败");
+        } else {
+          // 星标在榜单里,关注池在左栏,不给回执就只能靠自己找那颗星变没变色
+          toast.success(
+            `${isWatched ? "已移出" : "已加入"}关注池 ${shortAddr(address)}`,
+          );
         }
       } catch (err) {
-        setWatchError(String(err));
+        toast.error(String(err));
       }
       await loadWatch();
     },
-    [watchedSet, loadWatch],
+    [watchedSet, loadWatch, toast],
   );
 
   useEffect(() => {
@@ -329,7 +334,6 @@ export default function Dashboard({
   }, [analyzingCount, loadRatings]);
 
   async function analyzeAll() {
-    setBatchMsg(null);
     try {
       const res = await fetch("/api/leaderboard/analyze", {
         method: "POST",
@@ -342,12 +346,12 @@ export default function Dashboard({
         error?: string;
       };
       if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`);
-      if (d.queued === 0) setBatchMsg("本页地址都有近期报告,未重新分析");
+      if (d.queued === 0) toast.info("本页地址都有近期报告,未重新分析");
       else if (d.skipped)
-        setBatchMsg(`${d.queued} 个开始分析,${d.skipped} 个有近期报告已跳过`);
+        toast.info(`${d.queued} 个开始分析,${d.skipped} 个有近期报告已跳过`);
       await loadRatings();
     } catch (err) {
-      setBatchMsg(err instanceof Error ? err.message : "发起失败");
+      toast.error(err instanceof Error ? err.message : "发起失败");
     }
   }
 
@@ -376,7 +380,6 @@ export default function Dashboard({
         <WatchPanel
           watch={watch}
           limit={watchLimit}
-          error={watchError}
           watcher={watcher}
           onRemove={toggleWatch}
           onOpen={() => setWatchOpen(true)}
@@ -412,7 +415,6 @@ export default function Dashboard({
           >
             {analyzingCount > 0 ? `分析中 剩 ${analyzingCount} 个…` : "✦ 列表分析"}
           </button>
-          {batchMsg && <span className="text-[11px] text-mut">{batchMsg}</span>}
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <input
               value={search}
