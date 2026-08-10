@@ -1,6 +1,11 @@
 // LLM 用量看板:按日 × 消费方 × 模型聚合账本,登录可见(middleware 把关)。
 // 第一期只出接口,浏览器/CLI 直接看 JSON;要可视化面板等有需要再加。
 
+import {
+  LLM_CROSS_MODELS,
+  LLM_DEFAULT_MODEL,
+  LLM_MODELS,
+} from "@/src/config";
 import { query } from "@/src/db";
 import { llmDailyMaxUsd, llmSpentToday } from "@/src/llm-gateway";
 
@@ -43,6 +48,15 @@ export async function GET() {
   return Response.json({
     dailyMaxUsd: llmDailyMaxUsd(),
     todayUsd,
+    // 注册表全量:面板要展示「接入了哪些模型」,包括还没花过钱的
+    models: Object.entries(LLM_MODELS).map(([id, s]) => ({
+      id,
+      provider: s.provider,
+      roles: [
+        ...(id === LLM_DEFAULT_MODEL ? ["主力"] : []),
+        ...(LLM_CROSS_MODELS.includes(id) ? ["交叉"] : []),
+      ],
+    })),
     rows: rows.map((r) => ({
       // day_idx 是「北京时间偏移后」的自然日序号,乘回天长即得该日的
       // 北京日历日期(用 UTC 格式化正好抵消偏移)

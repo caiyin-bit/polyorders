@@ -8,6 +8,7 @@ import { type Config, type FeedTrade, type Funnel, type LeaderRow } from "@/app/
 import { AgentPanel } from "@/app/panels/agent";
 import { FeedLines } from "@/app/panels/feed";
 import { FunnelPanel } from "@/app/panels/funnel";
+import { LlmPanel } from "@/app/panels/llm";
 import { PipelinePanel } from "@/app/panels/pipeline";
 import { PortfolioPanel } from "@/app/panels/portfolio";
 import { TradePanel } from "@/app/panels/trade";
@@ -388,6 +389,7 @@ export default function Dashboard({
         <PortfolioPanel />
         <TradePanel />
         <AgentPanel />
+        <LlmPanel />
         <UsersPanel />
         <PipelinePanel />
       </div>
