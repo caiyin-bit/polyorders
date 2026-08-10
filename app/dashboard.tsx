@@ -92,6 +92,8 @@ type RatingItem = {
   status: string | null;
   rating: string | null;
   reason: string | null;
+  /** 交叉分析的成员评级计数(如 [{回避,3},{观望,1}]),单模型分析为 null */
+  members: Array<{ rating: string; count: number }> | null;
   finishedAt: number | null;
 };
 
@@ -118,6 +120,14 @@ function RatingCell({ item }: { item: RatingItem | undefined }) {
       >
         {item.rating}
       </span>
+      {item.members && item.members.length > 0 && (
+        <span
+          title="交叉分析中各模型的独立评级计数"
+          className="ml-1.5 font-mono text-[10px] text-mut"
+        >
+          {item.members.map((m) => `${m.count}${m.rating}`).join("+")}
+        </span>
+      )}
       {item.reason && (
         <div className="mt-0.5 max-w-56 whitespace-normal break-words text-[10px] leading-snug text-mut">
           {item.reason}

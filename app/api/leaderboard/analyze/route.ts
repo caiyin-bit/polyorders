@@ -45,6 +45,10 @@ async function topAddresses(): Promise<string[]> {
   return rows.map((r) => r.address);
 }
 
+// 成员评级计数的展示顺序:谨慎档优先(与综合裁决的保守取向一致),
+// 同档内按票数;「3回避+1观望」读起来先看到风险面
+const RATING_DISPLAY_ORDER = ["回避", "观望", "值得关注", "强烈关注"];
+
 /** 指定地址各自最新一次分析的摘要。?addrs=a,b,c;缺省回退 Top N */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -56,23 +60,53 @@ export async function GET(req: Request) {
 
   const { rows } = await query<{
     address: string;
+    analysis_id: number | null;
+    kind: string | null;
     status: string | null;
     rating: string | null;
     rating_reason: string | null;
     started_at: number | null;
     finished_at: number | null;
   }>(
-    `SELECT s.address, a.status, a.rating, a.rating_reason,
-            a.started_at, a.finished_at
+    `SELECT s.address, a.id AS analysis_id, a.kind, a.status, a.rating,
+            a.rating_reason, a.started_at, a.finished_at
      FROM unnest($1::text[]) AS s(address)
      LEFT JOIN LATERAL (
-       SELECT status, rating, rating_reason, started_at, finished_at
+       SELECT id, kind, status, rating, rating_reason, started_at, finished_at
        FROM wallet_analyses w
        WHERE w.address = s.address AND w.kind <> 'member'
        ORDER BY started_at DESC LIMIT 1
      ) a ON true`,
     [addresses],
   );
+
+  // 交叉分析行补上成员评级计数(如 3观望+1值得关注),一次查询带回全部
+  const crossIds = rows
+    .filter((r) => r.kind === "cross" && r.status === "done")
+    .map((r) => r.analysis_id as number);
+  const memberMap = new Map<number, Array<{ rating: string; count: number }>>();
+  if (crossIds.length > 0) {
+    const m = await query<{ group_id: number; rating: string; n: number }>(
+      `SELECT group_id, rating, COUNT(*)::int AS n
+       FROM wallet_analyses
+       WHERE kind = 'member' AND rating IS NOT NULL AND group_id = ANY($1)
+       GROUP BY group_id, rating`,
+      [crossIds],
+    );
+    for (const row of m.rows) {
+      const list = memberMap.get(row.group_id) ?? [];
+      list.push({ rating: row.rating, count: row.n });
+      memberMap.set(row.group_id, list);
+    }
+    for (const list of memberMap.values()) {
+      list.sort(
+        (a, b) =>
+          RATING_DISPLAY_ORDER.indexOf(a.rating) -
+          RATING_DISPLAY_ORDER.indexOf(b.rating),
+      );
+    }
+  }
+
   const items = rows.map((r) => ({
     address: r.address,
     status:
@@ -83,6 +117,8 @@ export async function GET(req: Request) {
           : r.status,
     rating: r.rating,
     reason: r.rating_reason,
+    members:
+      r.analysis_id !== null ? (memberMap.get(r.analysis_id) ?? null) : null,
     finishedAt: r.finished_at,
   }));
   return Response.json({ items });
