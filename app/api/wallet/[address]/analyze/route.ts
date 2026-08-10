@@ -3,6 +3,7 @@ import {
   isStaleRunning,
   latestAnalysis,
   queueAnalysisTask,
+  queueCrossAnalysis,
   type AnalysisRow,
 } from "@/src/analysis-service";
 import { isLlmConfigured } from "@/src/llm-gateway";
@@ -13,6 +14,7 @@ function toApi(r: AnalysisRow) {
   const stale = isStaleRunning(r.status, r.started_at);
   return {
     status: stale ? "error" : r.status,
+    kind: r.kind,
     content: r.content,
     model: r.model,
     rating: r.rating,
@@ -37,9 +39,12 @@ export async function GET(
   return Response.json({ analysis: row ? toApi(row) : null });
 }
 
-/** 发起分析:登记任务立即返回,前端轮询 GET 取结果。POST 语义:每次都花钱 */
+/**
+ * 发起分析,body 可选 { cross: true } 走多模型交叉分析。
+ * 登记任务立即返回,前端轮询 GET 取结果。POST 语义:每次都花钱
+ */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ address: string }> },
 ) {
   if (!isLlmConfigured()) {
@@ -49,8 +54,15 @@ export async function POST(
     );
   }
   const { address } = await params;
-  const id = await createAnalysisTask(address);
-  if (id !== null) queueAnalysisTask(id, address, "wallet-analysis");
+  const body = (await req.json().catch(() => ({}))) as { cross?: boolean };
+  const cross = body.cross === true;
+  const id = await createAnalysisTask(address, {
+    kind: cross ? "cross" : "single",
+  });
+  if (id !== null) {
+    if (cross) queueCrossAnalysis(id, address, "wallet-analysis-cross");
+    else queueAnalysisTask(id, address, "wallet-analysis");
+  }
   const row = await latestAnalysis(address);
   return Response.json({ analysis: row ? toApi(row) : null });
 }

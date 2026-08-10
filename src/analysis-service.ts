@@ -8,13 +8,17 @@
 
 import {
   buildAnalysisPrompt,
+  buildSynthesisPrompt,
   extractRating,
   ANALYST_SYSTEM,
+  SYNTHESIS_SYSTEM,
   type AnalysisClosedRow,
   type AnalysisInput,
   type AnalysisOpenPosition,
   type AnalysisTrade,
+  type SynthesisMember,
 } from "./analysis";
+import { LLM_CROSS_MODELS } from "./config";
 import { chat } from "./llm-gateway";
 import { query } from "./db";
 import { createLimiter } from "./http";
@@ -30,12 +34,14 @@ const CURVE_POINTS = 30;
 // 判死线必须留在其后;代价是真正的孤儿行要挂半小时才显示「中断」
 export const STALE_MS = 30 * 60_000;
 
-// 每地址保留的历史条数。只有最新一条会被展示,多留几条仅供排查
-const KEEP_PER_ADDRESS = 5;
+// 每地址保留的历史条数。只有最新一条会被展示,多留几条仅供排查;
+// 一轮交叉分析要占 4 行(3 成员 + 1 综合),额度按此放大
+const KEEP_PER_ADDRESS = 15;
 
 export type AnalysisRow = {
   id: number;
   status: string;
+  kind: string;
   content: string | null;
   model: string | null;
   rating: string | null;
@@ -54,10 +60,11 @@ export function isStaleRunning(status: string, startedAt: number): boolean {
 export async function latestAnalysis(
   address: string,
 ): Promise<AnalysisRow | null> {
+  // member 行是交叉分析的中间产物,只留档不对外当「最新分析」
   const { rows } = await query<AnalysisRow>(
-    `SELECT id, status, content, model, rating, rating_reason,
+    `SELECT id, status, kind, content, model, rating, rating_reason,
             prompt_tokens, completion_tokens, error, started_at, finished_at
-     FROM wallet_analyses WHERE address = $1
+     FROM wallet_analyses WHERE address = $1 AND kind <> 'member'
      ORDER BY started_at DESC LIMIT 1`,
     [address],
   );
@@ -71,7 +78,7 @@ export async function latestAnalysis(
  */
 export async function createAnalysisTask(
   address: string,
-  opts: { skipFreshDoneMs?: number } = {},
+  opts: { skipFreshDoneMs?: number; kind?: "single" | "cross" } = {},
 ): Promise<number | null> {
   const latest = await latestAnalysis(address);
   if (latest) {
@@ -88,9 +95,9 @@ export async function createAnalysisTask(
     }
   }
   const ins = await query<{ id: number }>(
-    `INSERT INTO wallet_analyses (address, status, started_at)
-     VALUES ($1, 'running', $2) RETURNING id`,
-    [address, Date.now()],
+    `INSERT INTO wallet_analyses (address, status, kind, started_at)
+     VALUES ($1, 'running', $2, $3) RETURNING id`,
+    [address, opts.kind ?? "single", Date.now()],
   );
   // 顺手修剪历史,免得反复分析的地址无限累积
   await query(
@@ -212,32 +219,50 @@ export function queueAnalysisTask(
  * 中途死掉,靠读侧的 STALE_MS 判定兜底。直接调用方仅限测试/脚本,
  * 线上一律经 queueAnalysisTask 入队。
  */
+// 低温度:同一份数据反复分析应给出基本一致的判断,这是审计不是创作。
+// reasoning 必须显式限档:默认与 medium 档实测思考 7k-8k token,把
+// maxTokens 全部吃掉导致正文为空;low 档(约 700 token 思考、全程 25s)
+// 的报告质量经真实数据核验没有损失。maxTokens 同时约束思考与正文
+const ANALYSIS_CHAT_OPTS = {
+  temperature: 0.3,
+  maxTokens: 8192,
+  timeoutMs: 180_000,
+  reasoning: "low",
+} as const;
+
+function runModelAnalysis(
+  prompt: string,
+  caller: string,
+  address: string,
+  model?: string,
+) {
+  return chat({
+    messages: [
+      { role: "system", content: ANALYST_SYSTEM },
+      { role: "user", content: prompt },
+    ],
+    caller,
+    refId: address,
+    model,
+    ...ANALYSIS_CHAT_OPTS,
+  });
+}
+
 export async function executeAnalysisTask(
   id: number,
   address: string,
   caller: string,
-  /** 逻辑模型名,缺省走网关默认(主力模型);交叉分析时由调用方指定 */
+  /** 逻辑模型名,缺省走网关默认(主力模型) */
   model?: string,
 ): Promise<void> {
   try {
     const input = await gatherInput(address);
-    const r = await chat({
-      messages: [
-        { role: "system", content: ANALYST_SYSTEM },
-        { role: "user", content: buildAnalysisPrompt(input) },
-      ],
+    const r = await runModelAnalysis(
+      buildAnalysisPrompt(input),
       caller,
-      refId: address,
+      address,
       model,
-      // 低温度:同一份数据反复分析应给出基本一致的判断,这是审计不是创作。
-      // reasoning 必须显式限档:默认与 medium 档实测思考 7k-8k token,把
-      // maxTokens 全部吃掉导致正文为空;low 档(约 700 token 思考、全程 25s)
-      // 的报告质量经真实数据核验没有损失。maxTokens 同时约束思考与正文
-      temperature: 0.3,
-      maxTokens: 8192,
-      timeoutMs: 120_000,
-      reasoning: "low",
-    });
+    );
     // 评级行剥离出结构化字段,正文入库时不再带机器行
     const extracted = extractRating(r.content);
     await query(
@@ -258,12 +283,133 @@ export async function executeAnalysisTask(
       ],
     );
   } catch (err) {
-    console.error(`钱包分析失败 ${address}: ${String(err)}`);
+    await failTask(id, address, err);
+  }
+}
+
+async function failTask(id: number, address: string, err: unknown): Promise<void> {
+  console.error(`钱包分析失败 ${address}: ${String(err)}`);
+  await query(
+    `UPDATE wallet_analyses
+     SET status = 'error', error = $2, finished_at = $3
+     WHERE id = $1`,
+    [id, String(err).slice(0, 500), Date.now()],
+  ).catch(() => {});
+}
+
+/** 交叉分析入队。任务级并发限制与单模型分析共享 */
+export function queueCrossAnalysis(
+  id: number,
+  address: string,
+  caller: string,
+): void {
+  void taskLimiter()(() => executeCrossAnalysisTask(id, address, caller));
+}
+
+/**
+ * 交叉分析:成员模型基于同一份数据并行独立出报告(留档为 member 行),
+ * 再由主力模型综合共识与分歧,产出对外展示的 cross 行。
+ * 部分成员失败可容忍(≥2 份即可综合),失败名单写进报告尾注。
+ */
+export async function executeCrossAnalysisTask(
+  id: number,
+  address: string,
+  caller: string,
+): Promise<void> {
+  try {
+    const input = await gatherInput(address);
+    const prompt = buildAnalysisPrompt(input);
+    const settled = await Promise.allSettled(
+      LLM_CROSS_MODELS.map((m) => runModelAnalysis(prompt, caller, address, m)),
+    );
+
+    const members: SynthesisMember[] = [];
+    const failures: string[] = [];
+    let usageIn = 0;
+    let usageOut = 0;
+    for (let i = 0; i < settled.length; i++) {
+      const model = LLM_CROSS_MODELS[i];
+      const s = settled[i];
+      if (s.status === "rejected") {
+        failures.push(`${model}: ${String(s.reason).slice(0, 120)}`);
+        continue;
+      }
+      const ex = extractRating(s.value.content);
+      usageIn += s.value.usage.promptTokens;
+      usageOut += s.value.usage.completionTokens;
+      members.push({
+        model,
+        rating: ex?.rating ?? null,
+        reason: ex?.reason ?? null,
+        content: ex?.content ?? s.value.content,
+      });
+      await query(
+        `INSERT INTO wallet_analyses (address, status, kind, group_id, content,
+           model, rating, rating_reason, prompt_tokens, completion_tokens,
+           started_at, finished_at)
+         VALUES ($1,'done','member',$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [
+          address,
+          id,
+          ex?.content ?? s.value.content,
+          model,
+          ex?.rating ?? null,
+          ex?.reason ?? null,
+          s.value.usage.promptTokens,
+          s.value.usage.completionTokens,
+          Date.now(),
+          Date.now(),
+        ],
+      );
+    }
+
+    if (members.length < 2) {
+      throw new Error(
+        `交叉分析成员不足(${members.length}/${LLM_CROSS_MODELS.length} 成功):${failures.join(";")}`,
+      );
+    }
+
+    const syn = await chat({
+      messages: [
+        { role: "system", content: SYNTHESIS_SYSTEM },
+        { role: "user", content: buildSynthesisPrompt(address, members) },
+      ],
+      caller,
+      refId: address,
+      temperature: 0.3,
+      maxTokens: 4096,
+      timeoutMs: 120_000,
+      reasoning: "low",
+    });
+    const ex = extractRating(syn.content);
+    usageIn += syn.usage.promptTokens;
+    usageOut += syn.usage.completionTokens;
+
+    const verdicts = members
+      .map((m) => `- ${m.model}:${m.rating ?? "未解析"}${m.reason ? ` | ${m.reason}` : ""}`)
+      .join("\n");
+    const failNote =
+      failures.length > 0 ? `\n(未参与:${failures.join(";")})` : "";
+    const content = `${ex?.content ?? syn.content}\n\n═══ 各模型独立评级 ═══\n${verdicts}${failNote}`;
+
     await query(
       `UPDATE wallet_analyses
-       SET status = 'error', error = $2, finished_at = $3
+       SET status = 'done', content = $2, model = $3, rating = $4,
+           rating_reason = $5, prompt_tokens = $6, completion_tokens = $7,
+           finished_at = $8
        WHERE id = $1`,
-      [id, String(err).slice(0, 500), Date.now()],
-    ).catch(() => {});
+      [
+        id,
+        content,
+        `cross:${members.map((m) => m.model).join("+")}`,
+        ex?.rating ?? null,
+        ex?.reason ?? null,
+        usageIn,
+        usageOut,
+        Date.now(),
+      ],
+    );
+  } catch (err) {
+    await failTask(id, address, err);
   }
 }

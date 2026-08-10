@@ -194,6 +194,38 @@ ${section("【最近已平仓】(平仓日期 | 市场 | 方向 | 均价 | 盈�
 评级:观望|理由:此处为一句话理由`;
 }
 
+/* ---------- 交叉分析:多模型独立报告的综合 ---------- */
+
+export const SYNTHESIS_SYSTEM = `你是跟单监控系统的首席分析师。多位独立分析师(不同的大模型)刚刚基于完全相同的数据,各自出具了对同一个 Polymarket 地址的检视报告。你的任务是汇总出一份最终结论。
+
+必须遵守:
+1. 只依据各份报告的内容,不引入报告之外的"事实";报告之间信息冲突时明确指出,不要私自裁决数据事实。
+2. 分歧比共识更有价值:某份报告独有的洞察(其他报告没看到的机制、风险)要点名提出,并评估其可信度。
+3. 综合评级从【强烈关注/值得关注/观望/回避】中选一档:各报告一致时随之;有分歧时偏保守(取更谨慎的一档),并说明分歧所在。
+4. 输出为纯文本,总长 300-500 字,分三节:「一、共识」「二、分歧与独有洞察」「三、综合判断」。
+5. 报告的最后一行必须是固定格式(供系统解析):单独成行、以「评级:」开头、半角竖线分隔、理由不超过 40 字:
+评级:观望|理由:此处为一句话理由`;
+
+export type SynthesisMember = {
+  model: string;
+  rating: string | null;
+  reason: string | null;
+  content: string;
+};
+
+export function buildSynthesisPrompt(
+  address: string,
+  members: SynthesisMember[],
+): string {
+  const parts = members.map(
+    (m, i) =>
+      `═══ 报告 ${i + 1}(模型:${m.model};其评级:${m.rating ?? "未给出"}${m.reason ? `,理由:${m.reason}` : ""})═══\n${m.content}`,
+  );
+  return `【任务】综合以下 ${members.length} 份对地址 ${address} 的独立检视报告,输出最终结论。
+
+${parts.join("\n\n")}`;
+}
+
 /* ---------- 评级解析:列表页每行展示的结构化字段来自这里 ---------- */
 
 export const RATINGS = ["强烈关注", "值得关注", "观望", "回避"] as const;

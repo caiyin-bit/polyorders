@@ -67,7 +67,8 @@ export async function GET(req: Request) {
      FROM unnest($1::text[]) AS s(address)
      LEFT JOIN LATERAL (
        SELECT status, rating, rating_reason, started_at, finished_at
-       FROM wallet_analyses w WHERE w.address = s.address
+       FROM wallet_analyses w
+       WHERE w.address = s.address AND w.kind <> 'member'
        ORDER BY started_at DESC LIMIT 1
      ) a ON true`,
     [addresses],

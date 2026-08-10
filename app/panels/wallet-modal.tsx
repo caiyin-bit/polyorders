@@ -22,6 +22,7 @@ type OpenPositionRow = {
 
 type WalletAnalysis = {
   status: "running" | "done" | "error";
+  kind: "single" | "cross";
   content: string | null;
   model: string | null;
   usage: { promptTokens: number; completionTokens: number };
@@ -217,12 +218,14 @@ export function WalletModal({
     return () => clearInterval(t);
   }, [address, analysis?.status]);
 
-  async function analyze() {
+  async function analyze(cross: boolean) {
     if (analysis?.status === "running") return;
     setAnalysisHidden(false);
     try {
       const r = await fetch(`/api/wallet/${address}/analyze`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cross }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
@@ -230,6 +233,7 @@ export function WalletModal({
     } catch (err) {
       setAnalysis({
         status: "error",
+        kind: cross ? "cross" : "single",
         content: null,
         model: null,
         usage: { promptTokens: 0, completionTokens: 0 },
@@ -346,7 +350,7 @@ export function WalletModal({
           </div>
           <div className="ml-3 flex shrink-0 items-center gap-2">
             <button
-              onClick={analyze}
+              onClick={() => analyze(false)}
               disabled={analysis?.status === "running"}
               className="rounded border border-accent/60 px-2.5 py-1 text-sm text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -355,6 +359,14 @@ export function WalletModal({
                 : analysis?.status === "done"
                   ? "重新分析"
                   : "✦ 分析"}
+            </button>
+            <button
+              onClick={() => analyze(true)}
+              disabled={analysis?.status === "running"}
+              title="三个不同厂商的模型并行独立分析,再综合共识与分歧"
+              className="rounded border border-accent/60 px-2.5 py-1 text-sm text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              ⇄ 交叉分析
             </button>
             <button
               onClick={onClose}
@@ -428,7 +440,9 @@ export function WalletModal({
               </div>
               {analysis.status === "running" ? (
                 <p className="text-xs text-mut">
-                  正在调用模型分析该地址的持仓、成交与历史盈亏,约需半分钟…
+                  {analysis.kind === "cross"
+                    ? "三个模型正在并行独立分析,随后综合共识与分歧,约需 1-2 分钟…"
+                    : "正在调用模型分析该地址的持仓、成交与历史盈亏,约需半分钟…"}
                   关掉弹窗也不会中断,回来即可查看。
                 </p>
               ) : analysis.status === "error" ? (

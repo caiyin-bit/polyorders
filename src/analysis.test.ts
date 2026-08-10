@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import {
   ANALYST_SYSTEM,
   buildAnalysisPrompt,
+  buildSynthesisPrompt,
   extractRating,
+  SYNTHESIS_SYSTEM,
   type AnalysisInput,
 } from "./analysis";
 
@@ -145,6 +147,25 @@ describe("buildAnalysisPrompt:钱包检视提示词", () => {
   it("系统提示词钉住关键纪律:禁止编造、数字佐证、幸存者偏差、纯文本输出", () => {
     for (const kw of ["不得出现", "具体数字", "幸存者偏差", "纯文本"]) {
       assert.ok(ANALYST_SYSTEM.includes(kw), `缺少:${kw}`);
+    }
+  });
+});
+
+describe("交叉分析综合提示词", () => {
+  it("综合提示词带上每份报告的模型名、评级与全文", () => {
+    const p = buildSynthesisPrompt("0xabc", [
+      { model: "deepseek-v4-flash", rating: "回避", reason: "无肉可吃", content: "报告A全文" },
+      { model: "qwen-max", rating: null, reason: null, content: "报告B全文" },
+    ]);
+    assert.ok(p.includes("2 份"));
+    assert.ok(p.includes("模型:deepseek-v4-flash;其评级:回避,理由:无肉可吃"));
+    assert.ok(p.includes("模型:qwen-max;其评级:未给出"));
+    assert.ok(p.includes("报告A全文") && p.includes("报告B全文"));
+  });
+
+  it("综合系统提示词钉住关键纪律:分歧优先、保守裁决、固定尾行", () => {
+    for (const kw of ["分歧", "偏保守", "评级:", "强烈关注/值得关注/观望/回避"]) {
+      assert.ok(SYNTHESIS_SYSTEM.includes(kw), `缺少:${kw}`);
     }
   });
 });
