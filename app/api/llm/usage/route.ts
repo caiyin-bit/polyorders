@@ -15,9 +15,11 @@ const DAYS = 14;
 // 与 bjDayStart 同源的北京时间偏移;用于把毫秒时间戳折算成自然日
 const BJ_OFFSET_MS = 8 * 3600_000;
 
+const RECENT_LIMIT = 50;
+
 export async function GET() {
   const since = Date.now() - DAYS * 86400_000;
-  const [{ rows }, todayUsd] = await Promise.all([
+  const [{ rows }, todayUsd, recentRes] = await Promise.all([
     query<{
       day_idx: number;
       caller: string;
@@ -43,6 +45,24 @@ export async function GET() {
       [since],
     ),
     llmSpentToday(),
+    query<{
+      id: number;
+      caller: string;
+      ref_id: string | null;
+      model: string;
+      provider: string;
+      status: string;
+      error: string | null;
+      prompt_tokens: number | null;
+      completion_tokens: number | null;
+      cost_usd: number | null;
+      latency_ms: number | null;
+      started_at: number;
+    }>(
+      `SELECT id, caller, ref_id, model, provider, status, error,
+              prompt_tokens, completion_tokens, cost_usd, latency_ms, started_at
+       FROM llm_calls ORDER BY id DESC LIMIT ${RECENT_LIMIT}`,
+    ),
   ]);
 
   return Response.json({
@@ -56,6 +76,20 @@ export async function GET() {
         ...(id === LLM_DEFAULT_MODEL ? ["主力"] : []),
         ...(LLM_CROSS_MODELS.includes(id) ? ["交叉"] : []),
       ],
+    })),
+    recent: recentRes.rows.map((r) => ({
+      id: r.id,
+      caller: r.caller,
+      refId: r.ref_id,
+      model: r.model,
+      provider: r.provider,
+      status: r.status,
+      error: r.error,
+      promptTokens: r.prompt_tokens,
+      completionTokens: r.completion_tokens,
+      costUsd: r.cost_usd,
+      latencyMs: r.latency_ms,
+      startedAt: r.started_at,
     })),
     rows: rows.map((r) => ({
       // day_idx 是「北京时间偏移后」的自然日序号,乘回天长即得该日的
