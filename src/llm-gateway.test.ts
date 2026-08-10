@@ -59,6 +59,17 @@ describe("buildRequestBody:供应商参数方言", () => {
     assert.deepEqual(high.reasoning, { effort: "high" });
   });
 
+  it("硅基流动:none → enable_thinking=false;档位翻译成 thinking_budget", () => {
+    const SF = LLM_MODELS["qwen"];
+    const off = buildRequestBody(SF, req({ reasoning: "none" }));
+    assert.equal(off.enable_thinking, false);
+    assert.equal("thinking_budget" in off, false);
+    const med = buildRequestBody(SF, req({ reasoning: "medium" }));
+    assert.equal(med.enable_thinking, true);
+    assert.equal(med.thinking_budget, 4096);
+    assert.equal(med.model, "Qwen/Qwen3.5-122B-A10B");
+  });
+
   it("省略 reasoning 时不带任何推理参数(走模型默认)", () => {
     const b = buildRequestBody(DS, req());
     assert.equal("thinking" in b, false);

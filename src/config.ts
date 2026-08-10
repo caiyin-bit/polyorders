@@ -57,8 +57,9 @@ export const TRADE_FEE_BUFFER = 0.04;
 //
 // DeepSeek 直连:主力模型,量大且最便宜;官方 API 无钉版本 ID,
 // deepseek-v4-flash 会被原地升级(当前指向 0731),留意输出分布漂移。
-// 其余模型走 OpenRouter 聚合:一把密钥拿到全部长尾模型。
-export type LlmProvider = "deepseek" | "openrouter";
+// 海外长尾模型走 OpenRouter 聚合,国产模型(Qwen/GLM/Kimi)走硅基流动。
+// 硅基流动按人民币计价,注册表折算成美元(汇率取 7.1)供预算与账本用。
+export type LlmProvider = "deepseek" | "openrouter" | "siliconflow";
 export type LlmModelSpec = {
   provider: LlmProvider;
   /** 供应商侧的真实模型名 */
@@ -90,6 +91,13 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
     model: "openai/gpt-5.6-luna",
     inUsdPerM: 0.1,
     outUsdPerM: 0.6,
+  },
+  // ¥0.8 / ¥6.4 每百万(<128K 上下文档位),按 7.1 折美元
+  qwen: {
+    provider: "siliconflow",
+    model: "Qwen/Qwen3.5-122B-A10B",
+    inUsdPerM: 0.11,
+    outUsdPerM: 0.9,
   },
 };
 export const LLM_DEFAULT_MODEL = "deepseek-v4-flash";

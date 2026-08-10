@@ -29,7 +29,15 @@ const PROVIDERS: Record<LlmProvider, { baseUrl: string; keyEnv: string }> = {
     baseUrl: "https://openrouter.ai/api/v1",
     keyEnv: "OPENROUTER_API_KEY",
   },
+  siliconflow: {
+    baseUrl: "https://api.siliconflow.cn/v1",
+    keyEnv: "SILICONFLOW_API_KEY",
+  },
 };
+
+// 硅基流动的思考控制是 token 预算而非档位,把统一档位翻译成预算值。
+// 上界对齐其文档允许范围(128-32768)
+const SF_THINKING_BUDGET = { low: 1024, medium: 4096, high: 16384 } as const;
 
 const TIMEOUT_MS = 60_000;
 const RETRIES = 2;
@@ -99,6 +107,7 @@ export function costUsd(
  * 组装请求体,按供应商方言映射 reasoning 参数。导出供测试。
  * DeepSeek: thinking:{type:"disabled"} / reasoning_effort
  * OpenRouter 统一层: reasoning:{enabled:false} / reasoning:{effort}
+ * 硅基流动: enable_thinking / thinking_budget(token 数)
  */
 export function buildRequestBody(
   spec: LlmModelSpec,
@@ -119,6 +128,15 @@ export function buildRequestBody(
     return req.reasoning === "none"
       ? { ...base, thinking: { type: "disabled" } }
       : { ...base, reasoning_effort: req.reasoning };
+  }
+  if (spec.provider === "siliconflow") {
+    return req.reasoning === "none"
+      ? { ...base, enable_thinking: false }
+      : {
+          ...base,
+          enable_thinking: true,
+          thinking_budget: SF_THINKING_BUDGET[req.reasoning],
+        };
   }
   return req.reasoning === "none"
     ? { ...base, reasoning: { enabled: false } }
