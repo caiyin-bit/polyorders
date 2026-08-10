@@ -96,6 +96,15 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
     inUsdPerM: 0.1,
     outUsdPerM: 0.6,
   },
+  // Qwen 旗舰,OpenRouter 接入(硅基流动未上架 3.8 系列)。
+  // 实测同 gemini:强制推理不可关思考
+  "qwen-max": {
+    provider: "openrouter",
+    model: "qwen/qwen3.8-max",
+    inUsdPerM: 2,
+    outUsdPerM: 6,
+    alwaysReasoning: true,
+  },
   // ¥0.8 / ¥6.4 每百万(<128K 上下文档位),按 7.1 折美元
   qwen: {
     provider: "siliconflow",

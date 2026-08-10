@@ -202,8 +202,9 @@ export function queueAnalysisTask(
   id: number,
   address: string,
   caller: string,
+  model?: string,
 ): void {
-  void taskLimiter()(() => executeAnalysisTask(id, address, caller));
+  void taskLimiter()(() => executeAnalysisTask(id, address, caller, model));
 }
 
 /**
@@ -215,6 +216,8 @@ export async function executeAnalysisTask(
   id: number,
   address: string,
   caller: string,
+  /** 逻辑模型名,缺省走网关默认(主力模型);交叉分析时由调用方指定 */
+  model?: string,
 ): Promise<void> {
   try {
     const input = await gatherInput(address);
@@ -225,6 +228,7 @@ export async function executeAnalysisTask(
       ],
       caller,
       refId: address,
+      model,
       // 低温度:同一份数据反复分析应给出基本一致的判断,这是审计不是创作。
       // reasoning 必须显式限档:默认与 medium 档实测思考 7k-8k token,把
       // maxTokens 全部吃掉导致正文为空;low 档(约 700 token 思考、全程 25s)
