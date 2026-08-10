@@ -143,9 +143,14 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
   },
 };
 export const LLM_DEFAULT_MODEL = "deepseek-v4-flash";
-// 交叉分析的成员模型:刻意选三家不同厂商(深度求索/阿里/xAI),
+// 交叉分析的成员模型:刻意选不同厂商(深度求索/阿里/xAI/月之暗面),
 // 同厂模型的盲区高度相关,跨厂才有真分歧。综合器用默认主力模型
-export const LLM_CROSS_MODELS = ["deepseek-v4-flash", "qwen-max", "grok"];
+export const LLM_CROSS_MODELS = [
+  "deepseek-v4-flash",
+  "qwen-max",
+  "grok",
+  "kimi-k3",
+];
 // 日预算与并发:对齐交易风控的哲学,默认取保守值,宁可分析停摆不可账单失控
 export const LLM_DAILY_MAX_USD_DEFAULT = 2;
 export const LLM_CONCURRENCY = 3;

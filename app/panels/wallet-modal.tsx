@@ -363,7 +363,7 @@ export function WalletModal({
             <button
               onClick={() => analyze(true)}
               disabled={analysis?.status === "running"}
-              title="三个不同厂商的模型并行独立分析,再综合共识与分歧"
+              title="多个不同厂商的模型并行独立分析,再综合共识与分歧"
               className="rounded border border-accent/60 px-2.5 py-1 text-sm text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50"
             >
               ⇄ 交叉分析
@@ -441,7 +441,7 @@ export function WalletModal({
               {analysis.status === "running" ? (
                 <p className="text-xs text-mut">
                   {analysis.kind === "cross"
-                    ? "三个模型正在并行独立分析,随后综合共识与分歧,约需 1-2 分钟…"
+                    ? "多个模型正在并行独立分析,随后综合共识与分歧,约需 1-2 分钟…"
                     : "正在调用模型分析该地址的持仓、成交与历史盈亏,约需半分钟…"}
                   关掉弹窗也不会中断,回来即可查看。
                 </p>
