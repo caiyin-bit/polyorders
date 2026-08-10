@@ -49,11 +49,56 @@ export const TRADE_DAILY_MAX_USD_DEFAULT = 20;
 // 取 4% 作为缓冲——限额约束的应当是实际支出,宁可略严也不要超支。
 export const TRADE_FEE_BUFFER = 0.04;
 
-// LLM 直连 DeepSeek 官方 API(OpenAI 兼容协议),零依赖 fetch。
-// 注意官方 API 不提供钉版本的模型 ID:deepseek-v4-flash 会被原地升级
-// (当前指向 0731),上游升级可能改变输出分布,留意线上行为漂移。
-export const LLM_BASE_URL = "https://api.deepseek.com";
-export const LLM_MODEL_DEFAULT = "deepseek-v4-flash";
+// ── LLM 网关 ────────────────────────────────────────────
+// 逻辑模型注册表:业务代码只写逻辑名,供应商、真实模型名、单价都在这里。
+// 换供应商或升级模型只改这张表,不动业务代码。
+// 单价(美元/百万 token)用于账本成本核算,来源为各供应商公开定价,
+// 调价后要跟着改——算出来的成本只作预算与审计,不是对账单。
+//
+// DeepSeek 直连:主力模型,量大且最便宜;官方 API 无钉版本 ID,
+// deepseek-v4-flash 会被原地升级(当前指向 0731),留意输出分布漂移。
+// 其余模型走 OpenRouter 聚合:一把密钥拿到全部长尾模型。
+export type LlmProvider = "deepseek" | "openrouter";
+export type LlmModelSpec = {
+  provider: LlmProvider;
+  /** 供应商侧的真实模型名 */
+  model: string;
+  inUsdPerM: number;
+  outUsdPerM: number;
+};
+export const LLM_MODELS: Record<string, LlmModelSpec> = {
+  "deepseek-v4-flash": {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+    inUsdPerM: 0.09,
+    outUsdPerM: 0.18,
+  },
+  "claude-sonnet": {
+    provider: "openrouter",
+    model: "anthropic/claude-sonnet-5",
+    inUsdPerM: 2,
+    outUsdPerM: 10,
+  },
+  "gemini-flash": {
+    provider: "openrouter",
+    model: "google/gemini-3.6-flash",
+    inUsdPerM: 1.5,
+    outUsdPerM: 7.5,
+  },
+  "gpt-mini": {
+    provider: "openrouter",
+    model: "openai/gpt-5.6-luna",
+    inUsdPerM: 0.1,
+    outUsdPerM: 0.6,
+  },
+};
+export const LLM_DEFAULT_MODEL = "deepseek-v4-flash";
+// 日预算与并发:对齐交易风控的哲学,默认取保守值,宁可分析停摆不可账单失控
+export const LLM_DAILY_MAX_USD_DEFAULT = 2;
+export const LLM_CONCURRENCY = 3;
+export const LLM_SPACING_MS = 1000;
+// 单次调用的 max_tokens 封顶:防止单次调用写出天价(推理+正文同池)
+export const LLM_MAX_TOKENS_CAP = 16384;
 
 // Agent 接入:注册端点必须匿名可调(agent 没有凭据),因此靠「未认领配额 +
 // 过期清理」限制滥用。选配额而非 IP 限速,是因为它不依赖内存状态,

@@ -4,36 +4,24 @@
 // 用户翻到第几页,分析的就是眼前这一页;地址必须存在于 scores 表,
 // 防止该端点被当成任意地址的免费分析器。
 //
-// POST 只登记任务便返回,执行走进程内队列:并发 3 是对 DeepSeek 与
-// Supabase 连接池(max 10)的双重克制。进度不单独建表——每个地址的
-// wallet_analyses 最新行就是进度,GET 聚合它们,前端轮询到没有 running 为止。
+// POST 只登记任务便返回,执行经 queueAnalysisTask 入队(任务级并发限制
+// 在 analysis-service,LLM 调用级限流与预算在 llm-gateway)。进度不单独
+// 建表——每个地址的 wallet_analyses 最新行就是进度,GET 聚合它们,
+// 前端轮询到没有 running 为止。
 
-import { createAnalysisTask, executeAnalysisTask, isStaleRunning } from "@/src/analysis-service";
+import { createAnalysisTask, isStaleRunning, queueAnalysisTask } from "@/src/analysis-service";
 import { TOP_N } from "@/src/config";
 import { query } from "@/src/db";
-import { createLimiter } from "@/src/http";
-import { isLlmConfigured } from "@/src/llm";
+import { isLlmConfigured } from "@/src/llm-gateway";
 import { normalizeAddress } from "@/src/watchlist";
 
 export const dynamic = "force-dynamic";
 
-const CONCURRENCY = 3;
-const SPACING_MS = 1000;
 // 一次最多接的地址数:列表每页上限 100,再多就是异常调用
 const MAX_ADDRESSES = 100;
 // 批量重跑的跳过窗口:窗口内已出报告的地址不再花钱。想强制刷新单个地址,
 // 弹窗里的「重新分析」不受此限
 const SKIP_FRESH_MS = 30 * 60_000;
-
-// 挂 globalThis:Next.js 会为每个路由文件建独立模块实例,HMR 也会重建,
-// 限流器必须全局唯一才能真正压住并发
-const g = globalThis as unknown as {
-  __analyzeLimiter?: <T>(fn: () => Promise<T>) => Promise<T>;
-};
-function limiter() {
-  if (!g.__analyzeLimiter) g.__analyzeLimiter = createLimiter(CONCURRENCY, SPACING_MS);
-  return g.__analyzeLimiter;
-}
 
 /** 校验、去重、截断,并过滤出 scores 里真实存在的地址 */
 async function sanitizeAddresses(raw: unknown): Promise<string[]> {
@@ -112,7 +100,6 @@ export async function POST(req: Request) {
   if (addresses.length === 0) {
     return Response.json({ error: "没有可分析的地址" }, { status: 400 });
   }
-  const run = limiter();
   let queued = 0;
   for (const address of addresses) {
     const id = await createAnalysisTask(address, {
@@ -120,7 +107,7 @@ export async function POST(req: Request) {
     });
     if (id === null) continue;
     queued++;
-    void run(() => executeAnalysisTask(id, address));
+    queueAnalysisTask(id, address, "list-analysis");
   }
   return Response.json({
     queued,

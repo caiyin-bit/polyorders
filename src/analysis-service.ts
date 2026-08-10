@@ -15,8 +15,9 @@ import {
   type AnalysisOpenPosition,
   type AnalysisTrade,
 } from "./analysis";
-import { chat } from "./llm";
+import { chat } from "./llm-gateway";
 import { query } from "./db";
+import { createLimiter } from "./http";
 import { walletSnapshot } from "./wallet";
 
 // 明细行数上限。持仓/成交沿用弹窗的 50;平仓明细取 30 条已够模型看出
@@ -183,32 +184,56 @@ async function gatherInput(address: string): Promise<AnalysisInput> {
   };
 }
 
+// 任务级并发限制:gatherInput 一个任务就并行发 7 路查询,批量 100 个任务
+// 无界并发会挤爆连接池(max 10)。LLM 调用另有网关层的全局限流,这里限的
+// 是「整个任务」。挂 globalThis 保证跨路由模块唯一
+const g = globalThis as unknown as {
+  __analysisTaskLimiter?: <T>(fn: () => Promise<T>) => Promise<T>;
+};
+function taskLimiter() {
+  if (!g.__analysisTaskLimiter) {
+    g.__analysisTaskLimiter = createLimiter(3, 500);
+  }
+  return g.__analysisTaskLimiter;
+}
+
+/** 任务入队(fire-and-forget)。所有消费方都走这里,共享任务级并发限制 */
+export function queueAnalysisTask(
+  id: number,
+  address: string,
+  caller: string,
+): void {
+  void taskLimiter()(() => executeAnalysisTask(id, address, caller));
+}
+
 /**
- * 执行分析任务并写回结果。web 容器是常驻 next start 进程,调用方
- * fire-and-forget 即可;进程若中途死掉,靠读侧的 STALE_MS 判定兜底。
+ * 执行分析任务并写回结果。web 容器是常驻 next start 进程,进程若
+ * 中途死掉,靠读侧的 STALE_MS 判定兜底。直接调用方仅限测试/脚本,
+ * 线上一律经 queueAnalysisTask 入队。
  */
 export async function executeAnalysisTask(
   id: number,
   address: string,
+  caller: string,
 ): Promise<void> {
   try {
     const input = await gatherInput(address);
-    const r = await chat(
-      [
+    const r = await chat({
+      messages: [
         { role: "system", content: ANALYST_SYSTEM },
         { role: "user", content: buildAnalysisPrompt(input) },
       ],
+      caller,
+      refId: address,
       // 低温度:同一份数据反复分析应给出基本一致的判断,这是审计不是创作。
       // reasoning 必须显式限档:默认与 medium 档实测思考 7k-8k token,把
       // maxTokens 全部吃掉导致正文为空;low 档(约 700 token 思考、全程 25s)
       // 的报告质量经真实数据核验没有损失。maxTokens 同时约束思考与正文
-      {
-        temperature: 0.3,
-        maxTokens: 8192,
-        timeoutMs: 120_000,
-        reasoning: "low",
-      },
-    );
+      temperature: 0.3,
+      maxTokens: 8192,
+      timeoutMs: 120_000,
+      reasoning: "low",
+    });
     // 评级行剥离出结构化字段,正文入库时不再带机器行
     const extracted = extractRating(r.content);
     await query(
@@ -220,7 +245,7 @@ export async function executeAnalysisTask(
       [
         id,
         extracted?.content ?? r.content,
-        r.model,
+        r.logicalModel,
         extracted?.rating ?? null,
         extracted?.reason ?? null,
         r.usage.promptTokens,

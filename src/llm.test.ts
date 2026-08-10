@@ -1,17 +1,25 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isLlmConfigured, parseChatCompletion } from "./llm";
+import { parseChatCompletion } from "./llm";
 
 describe("parseChatCompletion:DeepSeek 响应解析", () => {
-  it("正常响应提取回答与用量", () => {
+  it("正常响应提取回答与用量(含推理 token 明细)", () => {
     const r = parseChatCompletion({
       model: "deepseek-v4-flash",
       choices: [{ message: { content: "看多" } }],
-      usage: { prompt_tokens: 120, completion_tokens: 8 },
+      usage: {
+        prompt_tokens: 120,
+        completion_tokens: 8,
+        completion_tokens_details: { reasoning_tokens: 5 },
+      },
     });
     assert.equal(r.content, "看多");
     assert.equal(r.model, "deepseek-v4-flash");
-    assert.deepEqual(r.usage, { promptTokens: 120, completionTokens: 8 });
+    assert.deepEqual(r.usage, {
+      promptTokens: 120,
+      completionTokens: 8,
+      reasoningTokens: 5,
+    });
   });
 
   it("HTTP 200 里的业务错误必须抛出,不能当成模型回答", () => {
@@ -48,14 +56,10 @@ describe("parseChatCompletion:DeepSeek 响应解析", () => {
 
   it("usage 缺失时容忍为 0,不影响主结果", () => {
     const r = parseChatCompletion({ choices: [{ message: { content: "ok" } }] });
-    assert.deepEqual(r.usage, { promptTokens: 0, completionTokens: 0 });
-  });
-});
-
-describe("isLlmConfigured", () => {
-  it("有密钥为 true,无密钥或空串为 false", () => {
-    assert.equal(isLlmConfigured({ DEEPSEEK_API_KEY: "sk-xxx" }), true);
-    assert.equal(isLlmConfigured({}), false);
-    assert.equal(isLlmConfigured({ DEEPSEEK_API_KEY: "" }), false);
+    assert.deepEqual(r.usage, {
+      promptTokens: 0,
+      completionTokens: 0,
+      reasoningTokens: 0,
+    });
   });
 });

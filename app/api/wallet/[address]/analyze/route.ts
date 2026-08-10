@@ -1,11 +1,11 @@
 import {
   createAnalysisTask,
-  executeAnalysisTask,
   isStaleRunning,
   latestAnalysis,
+  queueAnalysisTask,
   type AnalysisRow,
 } from "@/src/analysis-service";
-import { isLlmConfigured } from "@/src/llm";
+import { isLlmConfigured } from "@/src/llm-gateway";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ export async function POST(
   }
   const { address } = await params;
   const id = await createAnalysisTask(address);
-  if (id !== null) void executeAnalysisTask(id, address);
+  if (id !== null) queueAnalysisTask(id, address, "wallet-analysis");
   const row = await latestAnalysis(address);
   return Response.json({ analysis: row ? toApi(row) : null });
 }
