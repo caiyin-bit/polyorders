@@ -96,6 +96,13 @@ export const LLM_MODELS: Record<string, LlmModelSpec> = {
     inUsdPerM: 0.1,
     outUsdPerM: 0.6,
   },
+  // Kimi 旗舰(官方开放平台密钥未走通,经 OpenRouter 接入)
+  "kimi-k3": {
+    provider: "openrouter",
+    model: "moonshotai/kimi-k3-20260715",
+    inUsdPerM: 3,
+    outUsdPerM: 15,
+  },
   // 实测强制推理不可关思考(OpenRouter 端点默认 high 档,调用务必显式限档)
   grok: {
     provider: "openrouter",
