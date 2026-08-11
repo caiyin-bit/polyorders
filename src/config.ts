@@ -38,6 +38,9 @@ export const WATCH_POOL_LIMIT = 10;
 export const WATCH_ALERT_MIN_USD = Number(process.env.WATCH_ALERT_MIN_USD) || 500;
 export const WATCH_ALERT_COOLDOWN_MS = 60_000;
 export const WATCH_RELOAD_MS = 30_000;
+// 全平台流正常时每秒都有事件;连接存在但 90 秒无有效成交就是半开连接,
+// 主动重连,不能等底层 TCP 自己发现。
+export const RTDS_EVENT_STALE_MS = 90_000;
 
 // 交易风控默认值(美元),可由 TRADE_MAX_USD / TRADE_DAILY_MAX_USD 覆盖。
 // 默认取保守值:即使环境变量漏配,也不会放出大额单。

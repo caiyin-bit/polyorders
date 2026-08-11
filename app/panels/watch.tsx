@@ -17,6 +17,8 @@ export type WatchRow = {
 
 export type WatcherState = {
   live: boolean;
+  connectedSince?: number | null;
+  lastHeartbeatAt?: number | null;
   lastEventAt: number | null;
   matchedSeen: number;
 };

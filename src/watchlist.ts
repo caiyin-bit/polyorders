@@ -1,4 +1,4 @@
-import { WATCH_POOL_LIMIT } from "./config";
+import { RTDS_EVENT_STALE_MS, WATCH_POOL_LIMIT } from "./config";
 import { query } from "./db";
 import { backfillManualAddress } from "./fetch/manual";
 import { fetchJson } from "./http";
@@ -108,10 +108,33 @@ export type WatchlistView = {
   limit: number;
   watcher: {
     live: boolean;
+    connectedSince: number | null;
+    lastHeartbeatAt: number | null;
     lastEventAt: number | null;
     matchedSeen: number;
   };
 };
+
+export type WatcherStateRow = {
+  connected: boolean;
+  connected_at: number | null;
+  last_heartbeat_at: number | null;
+  last_event_at: number | null;
+};
+
+/** 心跳只能证明进程活着;事件新鲜度才能证明 RTDS 数据真的还在流 */
+export function watcherStatus(s: WatcherStateRow, now = Date.now()) {
+  const heartbeatFresh =
+    s.last_heartbeat_at !== null && now - s.last_heartbeat_at < 90_000;
+  const eventFresh =
+    s.last_event_at !== null && now - s.last_event_at < RTDS_EVENT_STALE_MS;
+  return {
+    live: s.connected && heartbeatFresh && eventFresh,
+    connectedSince: s.connected_at,
+    lastHeartbeatAt: s.last_heartbeat_at,
+    lastEventAt: s.last_event_at,
+  };
+}
 
 export async function watchlistView(): Promise<WatchlistView> {
   const [pool, state] = await Promise.all([
@@ -125,29 +148,26 @@ export async function watchlistView(): Promise<WatchlistView> {
        LEFT JOIN scores s ON s.address = w.address
        ORDER BY w.added_at`,
     ),
-    query<{
-      connected: boolean;
-      last_heartbeat_at: number | null;
-      last_event_at: number | null;
-      matched_seen: number;
-    }>(
-      "SELECT connected, last_heartbeat_at, last_event_at, matched_seen FROM watcher_state WHERE id = 1",
+    query<WatcherStateRow & { matched_seen: number }>(
+      "SELECT connected, connected_at, last_heartbeat_at, last_event_at, matched_seen FROM watcher_state WHERE id = 1",
     ),
   ]);
 
-  // 心跳每 30 秒写一次;超过 90 秒没动静就认为实时通道已断,降级到 5 分钟轮询
   const s = state.rows[0];
-  const live =
-    !!s?.connected &&
-    s.last_heartbeat_at !== null &&
-    Date.now() - s.last_heartbeat_at < 90_000;
+  const status = s
+    ? watcherStatus(s)
+    : {
+        live: false,
+        connectedSince: null,
+        lastHeartbeatAt: null,
+        lastEventAt: null,
+      };
 
   return {
     watchlist: pool.rows,
     limit: WATCH_POOL_LIMIT,
     watcher: {
-      live,
-      lastEventAt: s?.last_event_at ?? null,
+      ...status,
       matchedSeen: s?.matched_seen ?? 0,
     },
   };

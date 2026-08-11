@@ -46,11 +46,29 @@ type Activity = {
   signals: SignalRow[];
   stats: {
     days: number;
+    feeRate: number;
     byHorizon: Array<{
       strategy: string;
+      segment: "all";
       horizon: string;
       n: number;
       avg_return: number | null;
+      median_return: number | null;
+      net_avg_return: number | null;
+      net_ci_low: number | null;
+      net_ci_high: number | null;
+      win_rate: number | null;
+    }>;
+    executableByHorizon: Array<{
+      strategy: string;
+      segment: "executable";
+      horizon: string;
+      n: number;
+      avg_return: number | null;
+      median_return: number | null;
+      net_avg_return: number | null;
+      net_ci_low: number | null;
+      net_ci_high: number | null;
       win_rate: number | null;
     }>;
     skipReasons: Array<{ skip_reason: string | null; n: number }>;
@@ -59,8 +77,22 @@ type Activity = {
       username: string | null;
       copies: number;
       avg_return_24h: number | null;
+      executable_copies: number;
+      resolved: number;
+      avg_return_res: number | null;
+      net_avg_return_res: number | null;
+      resolved_share: number | null;
     }>;
     signalsBySource: Array<{ source: string; n: number }>;
+    readiness: {
+      ready: boolean;
+      checks: Array<{
+        key: "days" | "resolved" | "return" | "concentration" | "rtds";
+        pass: boolean;
+        value: number | boolean | null;
+        target: number | boolean;
+      }>;
+    };
   };
 };
 
@@ -89,6 +121,30 @@ const HORIZON_ZH: Record<string, string> = {
   "24h": "+24 小时",
   res: "结算",
 };
+
+const READINESS_ZH: Record<string, string> = {
+  days: "观测天数",
+  resolved: "可执行结算样本",
+  return: "费后结算收益",
+  concentration: "最大钱包占比",
+  rtds: "RTDS 连续健康",
+};
+
+function readinessValue(c: Activity["stats"]["readiness"]["checks"][number]): string {
+  if (c.key === "days") return `${Number(c.value).toFixed(1)} / ≥${c.target} 天`;
+  if (c.key === "resolved") return `${c.value ?? 0} / ≥${c.target}`;
+  if (c.key === "return") {
+    return c.value === null ? "无数据 / >0%" : `${fmtPct(Number(c.value))} / >0%`;
+  }
+  if (c.key === "concentration") {
+    return c.value === null
+      ? "无数据"
+      : `${fmtPct(Number(c.value))} / <${fmtPct(Number(c.target))}`;
+  }
+  return c.value === false
+    ? "通道不健康"
+    : `${(Number(c.value) / 3_600_000).toFixed(1)} / ≥24 小时`;
+}
 
 /** 收益率上色:影子模拟的涨跌与真金同色 */
 function Ret({ value }: { value: number | null | undefined }) {
@@ -368,11 +424,45 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
                 {Math.round(e.rules.cooldownMs / 3_600_000)} 小时
               </p>
 
+              <div
+                className={`mt-4 rounded border px-3 py-3 ${
+                  st.readiness.ready
+                    ? "border-ok/40 bg-ok/5"
+                    : "border-accent/30 bg-accent/5"
+                }`}
+              >
+                <div className="flex items-center gap-2 text-xs font-medium text-ink2">
+                  实盘准备度
+                  <span
+                    className={st.readiness.ready ? "text-ok-ink" : "text-accent"}
+                  >
+                    {st.readiness.ready ? "已达标" : "继续影子"}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                  {st.readiness.checks.map((c) => (
+                    <span
+                      key={c.key}
+                      className={`rounded border px-1.5 py-0.5 ${
+                        c.pass
+                          ? "border-ok/30 bg-ok/10 text-ok-ink"
+                          : "border-line bg-panel2 text-mut"
+                      }`}
+                    >
+                      {c.pass ? "✓" : "○"} {READINESS_ZH[c.key]} {readinessValue(c)}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[10px] text-mut">
+                  这里只给出开闸证据,不会自动开启实盘;真正下单仍需双环境开关。
+                </p>
+              </div>
+
               {/* ── 影子成绩 ── */}
               <h3 className="mb-2 mt-6 text-xs font-medium tracking-wide text-ink2">
                 影子成绩
                 <span className="ml-2 font-normal text-mut">
-                  近 {st.days} 天 · 按决策时卖一价模拟买入
+                  近 {st.days} 天 · 卖一价模拟买入 · 费后按 {fmtPct(st.feeRate)} 保守费用
                 </span>
               </h3>
               <div className="grid gap-4 lg:grid-cols-2">
@@ -382,25 +472,48 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
                   </div>
                   <table className="w-full text-[11px]">
                     <tbody>
-                      {st.byHorizon.length === 0 && (
+                      {st.byHorizon.length === 0 && st.executableByHorizon.length === 0 && (
                         <tr>
                           <td className="px-3 py-2 text-mut">尚无已观测的模拟跟单</td>
                         </tr>
                       )}
-                      {st.byHorizon.map((h) => (
+                      {[...st.executableByHorizon, ...st.byHorizon].map((h) => (
                         <tr
-                          key={`${h.strategy}-${h.horizon}`}
+                          key={`${h.strategy}-${h.segment}-${h.horizon}`}
                           className="border-b border-line/50 last:border-0"
                         >
-                          <td className="px-3 py-1.5">{HORIZON_ZH[h.horizon] ?? h.horizon}</td>
+                          <td className="px-3 py-1.5">
+                            <span
+                              className={
+                                h.segment === "executable" ? "text-accent" : "text-mut"
+                              }
+                            >
+                              {h.segment === "executable" ? "可实盘" : "全部"}
+                            </span>
+                            <span className="ml-1.5">
+                              {HORIZON_ZH[h.horizon] ?? h.horizon}
+                            </span>
+                          </td>
                           <td className="px-3 py-1.5 text-right font-mono tabular-nums text-mut">
                             n={h.n}
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono tabular-nums">
-                            <Ret value={h.avg_return} />
+                            毛 <Ret value={h.avg_return} />
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono tabular-nums text-mut">
-                            胜率 {h.win_rate !== null ? fmtPct(h.win_rate) : "-"}
+                            费后 <Ret value={h.net_avg_return} />
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono tabular-nums text-mut">
+                            <div>
+                              中位 <Ret value={h.median_return} /> · 胜率{" "}
+                              {h.win_rate !== null ? fmtPct(h.win_rate) : "-"}
+                            </div>
+                            <div className="text-[9px]">
+                              大样本95%区间{" "}
+                              {h.net_ci_low !== null && h.net_ci_high !== null
+                                ? `${fmtPct(h.net_ci_low)}–${fmtPct(h.net_ci_high)}`
+                                : "样本不足"}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -410,16 +523,21 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
 
                 <div className="rounded border border-line">
                   <div className="border-b border-line bg-panel2 px-3 py-1.5 text-[10px] text-mut">
-                    分来源钱包(24h 持有期)
+                    分来源钱包(可实盘 yes/no · 结算)
                   </div>
                   <table className="w-full text-[11px]">
                     <tbody>
-                      {st.bySourceWallet.length === 0 && (
+                      {st.bySourceWallet.every((w) => w.executable_copies === 0) && (
                         <tr>
                           <td className="px-3 py-2 text-mut">尚无模拟跟单</td>
                         </tr>
                       )}
-                      {st.bySourceWallet.map((w) => (
+                      {st.bySourceWallet
+                        .filter((w) => w.executable_copies > 0)
+                        .sort(
+                          (a, b) => (b.resolved_share ?? 0) - (a.resolved_share ?? 0),
+                        )
+                        .map((w) => (
                         <tr key={w.address} className="border-b border-line/50 last:border-0">
                           <td className="px-3 py-1.5">
                             {w.username || (
@@ -427,13 +545,17 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
                             )}
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono tabular-nums text-mut">
-                            {w.copies} 次
+                            {w.executable_copies} 跟 / {w.resolved} 结 ·{" "}
+                            {w.resolved_share === null ? "-" : fmtPct(w.resolved_share)}
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono tabular-nums">
-                            <Ret value={w.avg_return_24h} />
+                            毛 <Ret value={w.avg_return_res} />
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+                            费后 <Ret value={w.net_avg_return_res} />
                           </td>
                         </tr>
-                      ))}
+                        ))}
                     </tbody>
                   </table>
                 </div>

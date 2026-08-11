@@ -12,7 +12,10 @@ export async function GET(req: Request) {
     await requireAgent(req);
     const days = Math.min(90, Number(new URL(req.url).searchParams.get("days")) || 30);
     return Response.json({
-      note: "avg_return 为 shadow 模拟(按决策时卖一价买入);win_rate 为观测价高于买入价的比例",
+      note:
+        "segment=executable 仅含当前实盘支持的 yes/no;avg_return 为卖一价毛收益;" +
+        "net_avg_return 扣除保守买入费用;95% 区间仅在 n>=30 时提供大样本正态近似;" +
+        "readiness 只提供证据,不会自动开启实盘",
       ...(await copyStats(days)),
     });
   } catch (err) {

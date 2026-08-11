@@ -8,6 +8,7 @@
 //   payload.timestamp 为秒;无 usdcSize 字段(用 price × size 现算)
 //   payload.proxyWallet 是校验和混合大小写,而库内地址统一小写
 import {
+  RTDS_EVENT_STALE_MS,
   WATCH_ALERT_COOLDOWN_MS,
   WATCH_ALERT_MIN_USD,
   WATCH_RELOAD_MS,
@@ -23,6 +24,38 @@ const PING_MS = 5_000;
 const HEARTBEAT_MS = 30_000;
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 60_000;
+const WATCHDOG_MS = 15_000;
+
+export { RTDS_EVENT_STALE_MS };
+
+/** 连接仍开着但事件流已经静默;导出供健康判定与回归测试共用 */
+export function isStreamStale(lastAt: number, now = Date.now()): boolean {
+  return now - lastAt >= RTDS_EVENT_STALE_MS;
+}
+
+/** watchdog 的可测试决策壳:仅在流已静默时调用现有关闭/重连路径 */
+export function closeStaleStream(
+  lastAt: number,
+  now: number,
+  close: () => void,
+): boolean {
+  if (!isStreamStale(lastAt, now)) return false;
+  close();
+  return true;
+}
+
+type ConnectionTimer = ReturnType<typeof setInterval>;
+
+/** 每次连接拥有独立的 ping/watchdog,断线时必须成对清理 */
+export function clearConnectionTimers(
+  ping: ConnectionTimer | number | undefined,
+  watchdog: ConnectionTimer | number | undefined,
+  clear: (id: ConnectionTimer | number) => void = (id) =>
+    clearInterval(id as ConnectionTimer),
+): void {
+  if (ping !== undefined) clear(ping);
+  if (watchdog !== undefined) clear(watchdog);
+}
 
 type TradePayload = {
   asset?: string;
@@ -179,10 +212,15 @@ async function handleTrade(p: TradePayload): Promise<void> {
 function connect(): void {
   const ws = new WebSocket(RTDS_URL);
   let ping: ReturnType<typeof setInterval> | undefined;
+  let watchdog: ReturnType<typeof setInterval> | undefined;
+  let connectionEventAt = Date.now();
 
   ws.addEventListener("open", () => {
     reconnectAttempt = 0;
     connectedAt = Date.now();
+    connectionEventAt = connectedAt;
+    // 新连接不能借用上一条连接的事件新鲜度。
+    lastEventAt = null;
     lastError = null;
     console.log(`watcher: 已连接,关注 ${watched.size} 个地址`);
     ws.send(
@@ -195,6 +233,13 @@ function connect(): void {
     ping = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) ws.send("PING");
     }, PING_MS);
+    watchdog = setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      closeStaleStream(connectionEventAt, Date.now(), () => {
+        lastError = `RTDS ${RTDS_EVENT_STALE_MS / 1000}s 无事件,主动重连`;
+        ws.close(4000, "stale stream");
+      });
+    }, WATCHDOG_MS);
     void writeState(true);
   });
 
@@ -211,8 +256,9 @@ function connect(): void {
     }
     if (msg.topic !== "activity" || msg.type !== "trades" || !msg.payload) return;
 
+    connectionEventAt = Date.now();
     eventsSeen++;
-    lastEventAt = Date.now();
+    lastEventAt = connectionEventAt;
     // 不 await:单条落库不应阻塞消费全平台流
     void handleTrade(msg.payload).catch((err) =>
       console.error(`watcher: 处理成交失败 ${String(err)}`),
@@ -224,7 +270,7 @@ function connect(): void {
   });
 
   ws.addEventListener("close", (ev: CloseEvent) => {
-    if (ping) clearInterval(ping);
+    clearConnectionTimers(ping, watchdog);
     connectedAt = null;
     lastError = `连接关闭 code=${ev.code} ${ev.reason}`.trim();
     void writeState(false);

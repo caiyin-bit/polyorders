@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalizeAddress, parseWatchInput } from "./watchlist";
+import { normalizeAddress, parseWatchInput, watcherStatus } from "./watchlist";
 
 // 关注池是 agent 可写的接口,地址校验是它唯一的输入门槛:
 // 放进一个非法值会污染抓取目标,而错误要到 5 分钟后的抓取日志里才显形
@@ -78,5 +78,39 @@ describe("parseWatchInput:自由输入解析", () => {
     assert.equal(parseWatchInput("你好世界"), null);
     assert.equal(parseWatchInput("@"), null);
     assert.equal(parseWatchInput(42), null);
+  });
+});
+
+describe("watcherStatus:实时通道健康不能只看心跳", () => {
+  const now = 1_786_400_000_000;
+  const healthy = {
+    connected: true,
+    connected_at: now - 25 * 3_600_000,
+    last_heartbeat_at: now - 30_000,
+    last_event_at: now - 5_000,
+  };
+
+  it("连接、心跳和事件都新鲜才是 live", () => {
+    assert.deepEqual(watcherStatus(healthy, now), {
+      live: true,
+      connectedSince: healthy.connected_at,
+      lastHeartbeatAt: healthy.last_heartbeat_at,
+      lastEventAt: healthy.last_event_at,
+    });
+  });
+
+  it("进程仍写心跳但 RTDS 事件静默时必须降级", () => {
+    assert.equal(
+      watcherStatus({ ...healthy, last_event_at: now - 90_000 }, now).live,
+      false,
+    );
+  });
+
+  it("心跳过期或未连接同样不是 live", () => {
+    assert.equal(
+      watcherStatus({ ...healthy, last_heartbeat_at: now - 90_000 }, now).live,
+      false,
+    );
+    assert.equal(watcherStatus({ ...healthy, connected: false }, now).live, false);
   });
 });
