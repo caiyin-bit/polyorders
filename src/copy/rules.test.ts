@@ -60,6 +60,20 @@ describe("evaluateSignal:策略 v1", () => {
     );
   });
 
+  it("市场级排除优先于其他死因——机器人小单刷屏不得污染 too-small 统计", () => {
+    assert.equal(
+      reasonOf({
+        ...good(),
+        title: "Dogecoin Up or Down - August 12, 9AM ET",
+        usd: 3,
+        price: 0.99,
+        lagMs: 2 * 3_600_000,
+        side: "SELL",
+      }),
+      "excluded-market",
+    );
+  });
+
   it("没抓到盘口不跟——没有成本证据的单不进样本", () => {
     assert.equal(reasonOf({ ...good(), bestAsk: null }), "no-book");
   });

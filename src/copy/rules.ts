@@ -36,6 +36,10 @@ export type Verdict = { copy: true } | { copy: false; reason: string };
 export function evaluateSignal(s: SignalForRules): Verdict {
   const skip = (reason: string): Verdict => ({ copy: false, reason });
 
+  // 市场级排除最先判:这类盘无论金额、方向、新鲜度都永远不跟,
+  // 先判才能让 skip 统计反映真实死因——否则刷 5 分钟币价盘的机器人
+  // 会把海量小单计入 too-small,污染后续的门槛反事实回测
+  if (s.title && EXCLUDED_TITLE.test(s.title)) return skip("excluded-market");
   // v1 只跟买入开仓;来源方的卖出作为我们的退出信号是第二期的事
   if (s.side !== "BUY") return skip("non-buy");
   // 新鲜度按实际检测延迟判,不看来源:RTDS 秒级通过,watch 轮询多数在窗口内,
@@ -45,7 +49,6 @@ export function evaluateSignal(s: SignalForRules): Verdict {
     return skip("price-band");
   }
   if ((s.usd ?? 0) < RULES.minUsd) return skip("too-small");
-  if (s.title && EXCLUDED_TITLE.test(s.title)) return skip("excluded-market");
   if (s.bestAsk == null) return skip("no-book");
   if (s.bestAsk > s.price * RULES.maxAskRatio) return skip("price-ran");
   return { copy: true };
