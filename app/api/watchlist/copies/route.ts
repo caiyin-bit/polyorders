@@ -1,4 +1,4 @@
-import { TRADE_FEE_BUFFER } from "@/src/config";
+import { TRADE_FEE_RATE } from "@/src/config";
 import { query } from "@/src/db";
 
 export const dynamic = "force-dynamic";
@@ -41,5 +41,5 @@ export async function GET(req: Request) {
     [Date.now() - days * 86_400_000, address, executable, horizon],
   );
 
-  return Response.json({ feeRate: TRADE_FEE_BUFFER, copies: rows });
+  return Response.json({ feeRate: TRADE_FEE_RATE, copies: rows });
 }

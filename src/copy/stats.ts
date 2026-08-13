@@ -1,4 +1,4 @@
-import { TRADE_FEE_BUFFER } from "../config";
+import { TRADE_FEE_RATE } from "../config";
 import { query } from "../db";
 import { watcherStatus, type WatcherStateRow } from "../watchlist";
 
@@ -35,9 +35,9 @@ export type CopyReadinessCheck = {
   target: number | boolean;
 };
 
-/** 毛收益扣掉买入侧保守费用后的资金收益率 */
+/** 毛收益扣掉买入侧实测费率后的资金收益率 */
 export function feeAdjustedReturn(grossReturn: number): number {
-  return (1 + grossReturn) / (1 + TRADE_FEE_BUFFER) - 1;
+  return (1 + grossReturn) / (1 + TRADE_FEE_RATE) - 1;
 }
 
 export function isExecutableOutcome(outcome: string | null): boolean {
@@ -88,7 +88,7 @@ export function evaluateCopyReadiness(metrics: CopyReadinessMetrics) {
 export async function copyStats(days: number) {
   const since = Date.now() - days * 86_400_000;
   const now = Date.now();
-  const costMultiplier = 1 + TRADE_FEE_BUFFER;
+  const costMultiplier = 1 + TRADE_FEE_RATE;
 
   const [byHorizon, skips, bySource, signalCounts, readinessRes, watcherRes] =
     await Promise.all([
@@ -237,7 +237,7 @@ export async function copyStats(days: number) {
 
   return {
     days,
-    feeRate: TRADE_FEE_BUFFER,
+    feeRate: TRADE_FEE_RATE,
     // 旧字段继续只返回全部样本;新字段承载当前可实盘子集,避免 Agent
     // 消费方升级前把两组行误当成一个总体重复累计。
     byHorizon: byHorizon.rows.filter((r) => r.segment === "all"),

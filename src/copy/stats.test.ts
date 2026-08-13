@@ -10,13 +10,13 @@ import {
   type CopyReadinessMetrics,
 } from "./stats";
 
-describe("feeAdjustedReturn:影子收益扣除保守买入费用", () => {
-  it("价格不动时应体现 4% 买入费用造成的亏损", () => {
-    assert.ok(Math.abs(feeAdjustedReturn(0) - (1 / 1.04 - 1)) < 1e-12);
+describe("feeAdjustedReturn:影子收益扣除实测买入费率", () => {
+  it("价格不动时应体现 3.1% 实测买入费用造成的亏损", () => {
+    assert.ok(Math.abs(feeAdjustedReturn(0) - (1 / 1.031 - 1)) < 1e-12);
   });
 
-  it("毛收益 4% 时费后恰好打平", () => {
-    assert.ok(Math.abs(feeAdjustedReturn(0.04)) < 1e-12);
+  it("毛收益 3.1% 时费后恰好打平", () => {
+    assert.ok(Math.abs(feeAdjustedReturn(0.031)) < 1e-12);
   });
 });
 
