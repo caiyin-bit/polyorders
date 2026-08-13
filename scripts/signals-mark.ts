@@ -25,14 +25,17 @@ type PendingRow = {
 };
 
 async function markPriceHorizons(limiter: ReturnType<typeof createLimiter>) {
-  // 最早的观测点 5 分钟到期,只扫描仍可能缺观测的时间窗
+  // 只扫仍缺「价格观测点」(5m/1h/24h)的信号。res 由 markResolutions 独立补,
+  // 不能计入本队列的完成度——否则等结算的行(市场几天后才开赛/结算)会赖满
+  // 批次头部,把价格打点整体饿死(2026-08-13 线上真实发生,是第二种堵法)
   const { rows } = await query<PendingRow>(
     `SELECT s.id, s.asset, s.condition_id, s.outcome, s.detected_at,
             array_agg(m.horizon) AS marked
      FROM signals s LEFT JOIN signal_marks m ON m.signal_id = s.id
      WHERE s.asset IS NOT NULL AND s.detected_at > $1
      GROUP BY s.id
-     HAVING COUNT(m.horizon) < ${Object.keys(HORIZON_MS).length + 1}
+     HAVING COUNT(m.horizon) FILTER (WHERE m.horizon <> 'res')
+            < ${Object.keys(HORIZON_MS).length}
      ORDER BY s.detected_at
      LIMIT ${BATCH}`,
     [Date.now() - SIGNALS_RETENTION_DAYS * 86_400_000],
