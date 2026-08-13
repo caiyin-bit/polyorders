@@ -1,6 +1,10 @@
 "use client";
 
 import { fmtAgo, fmtPct, shortAddr } from "@/app/lib/format";
+import {
+  CopyDetailModal,
+  type CopyDetailFilter,
+} from "@/app/panels/copy-detail-modal";
 import { useEffect, useState } from "react";
 
 /* ---------- 「实时关注」弹窗:关注池信号流 + 跟单引擎运行情况与影子成绩 ---------- */
@@ -193,6 +197,8 @@ function DecisionCell({ s }: { s: SignalRow }) {
 export function WatchModal({ onClose }: { onClose: () => void }) {
   const [data, setData] = useState<Activity | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 影子成绩聚合行点开的逐笔明细;非空时明细蒙板盖在本弹窗之上
+  const [detail, setDetail] = useState<CopyDetailFilter | null>(null);
 
   // 打开即拉,存续期间 10 秒一刷——和实时通道的节奏对齐
   useEffect(() => {
@@ -218,13 +224,16 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
+  // ESC 分层关闭:明细蒙板开着时先关它,再按才关本弹窗
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (detail) setDetail(null);
+      else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, detail]);
 
   // 弹窗存续期间锁住背景滚动(同 wallet-modal)
   useEffect(() => {
@@ -480,7 +489,15 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
                       {[...st.executableByHorizon, ...st.byHorizon].map((h) => (
                         <tr
                           key={`${h.strategy}-${h.segment}-${h.horizon}`}
-                          className="border-b border-line/50 last:border-0"
+                          className="cursor-pointer border-b border-line/50 last:border-0 hover:bg-panel2/60"
+                          title="点击查看逐笔明细"
+                          onClick={() =>
+                            setDetail({
+                              days: st.days,
+                              segment: h.segment,
+                              horizon: h.horizon,
+                            })
+                          }
                         >
                           <td className="px-3 py-1.5">
                             <span
@@ -538,7 +555,19 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
                           (a, b) => (b.resolved_share ?? 0) - (a.resolved_share ?? 0),
                         )
                         .map((w) => (
-                        <tr key={w.address} className="border-b border-line/50 last:border-0">
+                        <tr
+                          key={w.address}
+                          className="cursor-pointer border-b border-line/50 last:border-0 hover:bg-panel2/60"
+                          title="点击查看该钱包逐笔明细"
+                          onClick={() =>
+                            setDetail({
+                              days: st.days,
+                              segment: "executable",
+                              address: w.address,
+                              username: w.username,
+                            })
+                          }
+                        >
                           <td className="px-3 py-1.5">
                             {w.username || (
                               <span className="font-mono">{shortAddr(w.address)}</span>
@@ -579,6 +608,10 @@ export function WatchModal({ onClose }: { onClose: () => void }) {
           )}
         </div>
       </div>
+
+      {detail && (
+        <CopyDetailModal filter={detail} onClose={() => setDetail(null)} />
+      )}
     </div>
   );
 }
