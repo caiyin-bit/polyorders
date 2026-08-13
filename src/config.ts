@@ -30,8 +30,10 @@ export const SIGNALS_RETENTION_DAYS = 90;
 export const COPY_ORDER_USD = 2;
 export const COPY_DAILY_MAX_USD_DEFAULT = 10;
 
-// 实时关注池:小池子才支撑得起 5 分钟级高频定向拉取
-export const WATCH_POOL_LIMIT = 10;
+// 实时关注池:小池子才支撑得起 5 分钟级高频定向拉取。
+// 2026-08-13 从 10 放宽到 15:轮询是每轮每地址一次请求、打点日容量 8 万+,
+// 15 个地址远未到瓶颈;继续放大前先看 signals 日增与打点积压
+export const WATCH_POOL_LIMIT = 15;
 
 // RTDS 实时 watcher。全平台成交流约 28 条/秒,只有命中关注池的才落库。
 // 大额成交推 Telegram;冷却按地址生效,避免连续成交刷屏。
