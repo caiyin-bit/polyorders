@@ -81,7 +81,7 @@ export async function maybeCopy(
   sourceAddress: string,
 ): Promise<void> {
   try {
-    const verdict = evaluateSignal(s);
+    const verdict = evaluateSignal({ ...s, sourceAddress });
     if (!verdict.copy) {
       await recordDecision({ signalId: s.id, decision: "skip", skipReason: verdict.reason });
       return;

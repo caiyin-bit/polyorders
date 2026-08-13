@@ -21,7 +21,17 @@ export const RULES = {
 /** 5 分钟币价盘:结算周期短于我们的执行延迟,永远别跟 */
 const EXCLUDED_TITLE = /\bUp or Down\b/i;
 
+/** 结算口径判负的钱包(2026-08-13 裁决),shadow 样本预算让给白名单候选。
+ * 仍留在关注池做离线观测,这里只挡跟单;地址一律小写比对 */
+const BLACKLISTED_WALLETS = new Set([
+  "0xeaac36f714563e13d88db7a4f0a0898388f2d71d", // GamblingAddict12345 res -23.8%/n=36(MUL)
+  "0x4a3f86ed9ce6b3dac5b66e2d5478a6bf38cc4333", // Jarod21 res -11.0%/n=81,双口径皆负
+  "0x6b97ebe911d7f2e5e3e8c4a0faad4a5c7c0b8d30", // vibing123 res -32.0%/n=44
+]);
+
 export type SignalForRules = {
+  /** 被跟钱包地址 */
+  sourceAddress: string;
   side: string;
   /** 检测时刻 − 成交时刻,毫秒 */
   lagMs: number;
@@ -40,6 +50,11 @@ export function evaluateSignal(s: SignalForRules): Verdict {
   // 先判才能让 skip 统计反映真实死因——否则刷 5 分钟币价盘的机器人
   // 会把海量小单计入 too-small,污染后续的门槛反事实回测
   if (s.title && EXCLUDED_TITLE.test(s.title)) return skip("excluded-market");
+  // 钱包级排除紧随其后:判负钱包的单不进 copy 样本,免得继续摊薄
+  // 白名单组合的统计功效;排在市场级之后,保持 excluded-market 口径不变
+  if (BLACKLISTED_WALLETS.has(s.sourceAddress.toLowerCase())) {
+    return skip("blacklisted-wallet");
+  }
   // v1 只跟买入开仓;来源方的卖出作为我们的退出信号是第二期的事
   if (s.side !== "BUY") return skip("non-buy");
   // 新鲜度按实际检测延迟判,不看来源:RTDS 秒级通过,watch 轮询多数在窗口内,

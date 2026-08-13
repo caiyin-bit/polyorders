@@ -4,6 +4,7 @@ import { evaluateSignal, RULES, type SignalForRules } from "./rules";
 
 // 一条完全合格的信号;各用例在此基础上破坏单一条件
 const good = (): SignalForRules => ({
+  sourceAddress: "0x1a4de519a3c4a1acfae30f9b0e8a0dc191370b39",
   side: "BUY",
   lagMs: 3_000,
   price: 0.55,
@@ -69,6 +70,26 @@ describe("evaluateSignal:策略 v1", () => {
         price: 0.99,
         lagMs: 2 * 3_600_000,
         side: "SELL",
+      }),
+      "excluded-market",
+    );
+  });
+
+  it("判负钱包不跟,大小写不敏感", () => {
+    const jarod = "0x4a3f86ed9ce6b3dac5b66e2d5478a6bf38cc4333";
+    assert.equal(reasonOf({ ...good(), sourceAddress: jarod }), "blacklisted-wallet");
+    assert.equal(
+      reasonOf({ ...good(), sourceAddress: jarod.toUpperCase().replace("0X", "0x") }),
+      "blacklisted-wallet",
+    );
+  });
+
+  it("市场级排除优先于钱包黑名单——excluded-market 口径不因裁决漂移", () => {
+    assert.equal(
+      reasonOf({
+        ...good(),
+        sourceAddress: "0x6b97ebe911d7f2e5e3e8c4a0faad4a5c7c0b8d30",
+        title: "Ethereum Up or Down - August 13, 9AM ET",
       }),
       "excluded-market",
     );
