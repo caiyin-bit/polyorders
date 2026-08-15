@@ -5,7 +5,8 @@ set -e
 cd "$(dirname "$0")/.."
 git pull --ff-only
 
-# 构建期 ISR 预渲染要连库,compose 的 database_url secret 从 shell 环境取值
+# 构建期不连库(页面改为运行期渲染);.env 仍需 source,compose 要用其中的
+# POSTGRES_PASSWORD 插值 db 服务
 set -a; . ./.env; set +a
 docker compose -f docker-compose.vps.yml build
 
@@ -14,6 +15,7 @@ docker compose -f docker-compose.vps.yml build
 # 紧急情况需要绕过时,直接手工执行下面几条 docker compose 命令即可。
 docker compose -f docker-compose.vps.yml run --rm web pnpm test
 
+docker compose -f docker-compose.vps.yml up -d db
 docker compose -f docker-compose.vps.yml run --rm web pnpm db:migrate
 docker compose -f docker-compose.vps.yml up -d
 docker image prune -f

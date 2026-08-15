@@ -9,8 +9,9 @@ import {
 import Dashboard from "../dashboard";
 import type { FeedTrade, Funnel, LeaderRow } from "@/app/lib/types";
 
-// ISR:数据由每日定时抓取更新,5 分钟缓存足够新鲜;dev 模式不受影响仍实时
-export const revalidate = 300;
+// 每请求渲染:数据库迁至 VPS 内网后构建机(GitHub runner)已无法连库,
+// 构建期不得再预渲染本页;仪表盘本就要求实时,去掉 ISR 缓存反而更贴合
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const [funnelRes, rowsRes, sparkRes, feedRes] = await Promise.all([

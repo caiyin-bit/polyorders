@@ -1,6 +1,33 @@
-# 首尔 VPS 生产编排:caddy(TLS 入口)+ web(Next.js)+ scheduler(定时抓取)
-# 数据库使用 Supabase(.env 中 DATABASE_URL),本机不存数据
+# 首尔 VPS 生产编排:db(Postgres)+ caddy(TLS 入口)+ web(Next.js)+ scheduler(定时抓取)
+# 数据库 2026-08-15 从 Supabase 迁入本机:仅在 compose 内网监听,不映射宿主端口,
+# 外部访问一律走 SSH 隧道。DATABASE_URL 在 .env 中指向 db:5432
 services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: polyorders
+      POSTGRES_USER: polyorders
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 未设置(见 .env)}
+    # 2C/4G 机器上与 web/scheduler/watcher 共存,内存参数保守取值
+    command:
+      - postgres
+      - -c
+      - shared_buffers=192MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=192MB
+      - -c
+      - max_connections=50
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polyorders -d polyorders"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -21,7 +48,6 @@ services:
     build:
       context: .
       target: app
-      secrets: [database_url]
     restart: unless-stopped
     env_file: .env
     environment:
@@ -31,13 +57,15 @@ services:
       NODE_OPTIONS: --dns-result-order=ipv4first
     ports:
       - "127.0.0.1:3000:3000" # 仅本机调试用,外网入口走 caddy
+    depends_on:
+      db:
+        condition: service_healthy
 
   scheduler:
     image: ghcr.io/caiyin-bit/polyorders-scheduler:${IMAGE_TAG:-latest}
     build:
       context: .
       target: scheduler
-      secrets: [database_url]
     restart: unless-stopped
     env_file: .env
     environment:
@@ -45,6 +73,9 @@ services:
       NODE_OPTIONS: --dns-result-order=ipv4first
     volumes:
       - fetch_logs:/var/log/fetch
+    depends_on:
+      db:
+        condition: service_healthy
 
   # RTDS 实时 watcher:常驻 WebSocket,关注池地址的秒级成交感知。
   # 与 scheduler 共用 app 镜像;5 分钟轮询仍是正确性兜底,此服务挂掉不影响数据完整性。
@@ -53,21 +84,18 @@ services:
     build:
       context: .
       target: app
-      secrets: [database_url]
     restart: unless-stopped
     env_file: .env
     environment:
       TZ: Asia/Shanghai
       NODE_OPTIONS: --dns-result-order=ipv4first
     command: ["pnpm", "watch:rtds"]
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   caddy_data:
   caddy_config:
   fetch_logs:
-
-# 构建期 ISR 预渲染要连库;从执行 compose 的 shell 环境取值
-# (vps-deploy.sh 会先 source .env),不进镜像元数据
-secrets:
-  database_url:
-    environment: DATABASE_URL
+  pgdata:

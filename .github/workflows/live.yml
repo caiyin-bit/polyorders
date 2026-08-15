@@ -1,7 +1,8 @@
 name: live
 
-# 定时抓取已迁至首尔 VPS(docker-compose.vps.yml 的 scheduler),
-# 此工作流仅保留手动触发作为兜底
+# 定时抓取在首尔 VPS(docker-compose.vps.yml 的 scheduler),此工作流仅手动兜底。
+# 2026-08-15 数据库迁入 VPS 内网后 runner 无法直连,改为 SSH 触发 VPS 上执行:
+# 复用 deploy.yml 同一把强制命令密钥,分发与白名单校验见 scripts/vps-release.sh
 on:
   workflow_dispatch:
 
@@ -14,18 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: 应用数据库迁移
-        run: pnpm db:migrate
+      - name: SSH 触发 VPS 抓取 Top N 持仓与成交(step 5)
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - name: 抓取 Top N 持仓与成交
-        run: pnpm exec tsx src/fetch/index.ts --step=5
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          HOST_KEY: ${{ secrets.VPS_HOST_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s\n' "$HOST_KEY" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o BatchMode=yes root@141.164.53.169 "fetch 5"
